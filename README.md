@@ -31,7 +31,9 @@ The app is ad-hoc signed, not notarized, so the first launch is blocked by Gatek
 
 ### Updates
 
-Cadence checks GitHub for a newer release once a day. When one exists, you'll see a notice. Install it from **Preferences → Updates** or **Cadence → Check for Updates…**. Cadence downloads the release, checks that it is a valid Cadence bundle of the expected version, replaces itself, and relaunches. The app needs write access to the folder it lives in (true for `/Applications` on most Macs).
+Every release reaches installed copies on its own. Cadence checks GitHub at launch and every 4 hours. A new release downloads in the background and is checked to be a valid Cadence bundle of the expected version. It then installs as soon as nothing would be interrupted: no focus interval running and no music playing. It also installs when you quit. Cadence relaunches on the new version and says so; a paused interval is restored.
+
+You can turn this off in **Preferences → Updates**, then install with **Restart & install**. The app needs write access to the folder it lives in (true for `/Applications` on most Macs).
 
 After an update, macOS may ask again for permission to control Brave. This happens because each ad-hoc signed build is treated as a new app.
 

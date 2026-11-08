@@ -3,9 +3,12 @@ import Foundation
 
 /// In-app updates from GitHub Releases.
 ///
-/// Checks `releases/latest` of the repository named by `CadenceUpdateRepository` in
-/// Info.plist, downloads the release's `.zip` asset, verifies it is a valid Cadence
-/// bundle newer than this one, then swaps it in place of the running app and relaunches.
+/// Every installed copy checks `releases/latest` of the repository named by
+/// `CadenceUpdateRepository` in Info.plist at launch and every few hours. A newer
+/// release is downloaded and verified in the background (bundle id, version,
+/// codesign integrity), then installed automatically as soon as nothing would be
+/// interrupted (`isIdle`), or when the app quits. Automatic install can be turned off;
+/// the update is then offered in Preferences → Updates.
 /// ponytail: trusts GitHub over HTTPS + bundle id + codesign integrity; add an EdDSA
 /// signature check (or Developer ID + notarization) if the release channel needs hardening.
 @MainActor
@@ -24,37 +27,71 @@ final class Updater: ObservableObject {
         case checking
         case upToDate
         case available(Release)
+        case downloading(Release)
+        /// Downloaded and verified; waiting for a quiet moment (or quit) to install.
+        case ready(Release)
         case installing
         case failed(String)
     }
 
     @Published private(set) var state: State = .idle
+    @Published var installAutomatically: Bool {
+        didSet { UserDefaults.standard.set(installAutomatically, forKey: Self.autoInstallKey) }
+    }
+
+    /// Set by the app: true when restarting now would interrupt nothing.
+    var isIdle: () -> Bool = { true }
 
     var hasUpdate: Bool {
-        if case .available = state { return true }
-        return false
+        switch state {
+        case .available, .downloading, .ready: return true
+        default: return false
+        }
     }
 
     let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 
     private let repository = Bundle.main.object(forInfoDictionaryKey: "CadenceUpdateRepository") as? String
         ?? "aminefourari/cadence"
-    private static let lastCheckKey = "cadence.lastUpdateCheck"
+    private static let autoInstallKey = "cadence.installUpdatesAutomatically"
+    private static let checkInterval: TimeInterval = 4 * 3600
+    private var stagedApp: URL?
+    private var timers: [Timer] = []
 
     var releasesPage: URL { URL(string: "https://github.com/\(repository)/releases")! }
 
-    /// Checks at most once a day, silently unless an update is found.
-    func checkAutomaticallyIfDue(onAvailable: @escaping (Release) -> Void) {
-        let last = UserDefaults.standard.double(forKey: Self.lastCheckKey)
-        guard Date().timeIntervalSince1970 - last > 24 * 3600 else { return }
-        Task {
-            await check()
-            if case .available(let release) = state { onAvailable(release) }
+    private init() {
+        installAutomatically = UserDefaults.standard.object(forKey: Self.autoInstallKey) as? Bool ?? true
+    }
+
+    /// Starts background checks: now, then every few hours; and an idle watcher that
+    /// installs a staged update at the first quiet moment.
+    func startAutomaticUpdates() {
+        guard timers.isEmpty else { return }
+        Task { await checkAndStage() }
+        let check = Timer(timeInterval: Self.checkInterval, repeats: true) { _ in
+            Task { @MainActor in await Updater.shared.checkAndStage() }
         }
+        let idle = Timer(timeInterval: 60, repeats: true) { _ in
+            Task { @MainActor in Updater.shared.installIfIdle() }
+        }
+        for timer in [check, idle] { RunLoop.main.add(timer, forMode: .common) }
+        timers = [check, idle]
+    }
+
+    private func checkAndStage() async {
+        if case .ready = state { return }
+        await check()
+        guard installAutomatically, case .available(let release) = state else { return }
+        await download(release)
+        installIfIdle()
     }
 
     func check() async {
-        guard state != .checking, state != .installing else { return }
+        switch state {
+        case .checking, .downloading, .ready, .installing: return
+        default: break
+        }
         state = .checking
         do {
             var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!)
@@ -65,7 +102,6 @@ final class Updater: ObservableObject {
                 throw UpdateError("GitHub didn't return a release.")
             }
             let payload = try JSONDecoder().decode(GitHubRelease.self, from: data)
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastCheckKey)
 
             let version = payload.tagName.hasPrefix("v") ? String(payload.tagName.dropFirst()) : payload.tagName
             guard Self.isNewer(version, than: currentVersion) else {
@@ -86,12 +122,18 @@ final class Updater: ObservableObject {
         }
     }
 
-    /// Downloads, verifies and installs the release, then quits so the helper can swap and relaunch.
+    /// Installs now (user clicked): downloads if needed, then swaps and relaunches.
     func install(_ release: Release) async {
-        state = .installing
+        if stagedApp == nil { await download(release) }
+        guard case .ready = state else { return }
+        apply(relaunch: true)
+    }
+
+    /// Downloads and verifies the release into a temporary folder.
+    private func download(_ release: Release) async {
+        state = .downloading(release)
         do {
-            let target = Bundle.main.bundleURL
-            let parent = target.deletingLastPathComponent()
+            let parent = Bundle.main.bundleURL.deletingLastPathComponent()
             guard FileManager.default.isWritableFile(atPath: parent.path) else {
                 throw UpdateError("Cadence can't write to \(parent.path). Download the update from GitHub instead.")
             }
@@ -115,7 +157,29 @@ final class Updater: ObservableObject {
             }
             try await Self.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", newApp.path])
 
-            try launchSwapHelper(newApp: newApp, target: target)
+            stagedApp = newApp
+            state = .ready(release)
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func installIfIdle() {
+        guard installAutomatically, case .ready = state, isIdle() else { return }
+        apply(relaunch: true)
+    }
+
+    /// Called when the app quits: a staged update is installed without reopening.
+    func installOnQuit() {
+        guard case .ready = state else { return }
+        try? launchSwapHelper(relaunch: false)
+    }
+
+    private func apply(relaunch: Bool) {
+        do {
+            try launchSwapHelper(relaunch: relaunch)
+            state = .installing
+            stagedApp = nil // the helper owns it now; don't install twice on quit
             NSApp.terminate(nil)
         } catch {
             state = .failed(error.localizedDescription)
@@ -123,8 +187,9 @@ final class Updater: ObservableObject {
     }
 
     /// A detached shell helper waits for this process to exit, replaces the bundle
-    /// (restoring the old one if the copy fails) and reopens Cadence.
-    private func launchSwapHelper(newApp: URL, target: URL) throws {
+    /// (restoring the old one if the copy fails) and optionally reopens Cadence.
+    private func launchSwapHelper(relaunch: Bool) throws {
+        guard let newApp = stagedApp else { throw UpdateError("No update is ready.") }
         let script = """
         while kill -0 "$1" 2>/dev/null; do sleep 0.2; done
         rm -rf "$3.old"
@@ -134,12 +199,14 @@ final class Updater: ObservableObject {
           rm -rf "$3"; mv "$3.old" "$3"
         fi
         /usr/bin/xattr -dr com.apple.quarantine "$3" 2>/dev/null
-        /usr/bin/open "$3"
+        [ "$4" = 1 ] && /usr/bin/open "$3"
+        exit 0
         """
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", script, "cadence-update",
-                             String(ProcessInfo.processInfo.processIdentifier), newApp.path, target.path]
+                             String(ProcessInfo.processInfo.processIdentifier),
+                             newApp.path, Bundle.main.bundleURL.path, relaunch ? "1" : "0"]
         try process.run()
     }
 
