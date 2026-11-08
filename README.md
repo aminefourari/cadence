@@ -78,7 +78,14 @@ If several YouTube tabs are open, Cadence uses the active tab in the front windo
 ## A closer look
 
 <p align="center">
+  <img src="docs/screenshots/tasks.jpg" width="48%" alt="Eisenhower task board and day plan" />
+  <img src="docs/screenshots/history.jpg" width="48%" alt="Focus history" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/intention.jpg" width="48%" alt="Intention check-in with a one-off length" />
   <img src="docs/screenshots/focus-running.jpg" width="48%" alt="A focus interval running" />
+</p>
+<p align="center">
   <img src="docs/screenshots/settings.jpg" width="48%" alt="Cadence preferences" />
 </p>
 
