@@ -172,25 +172,41 @@ enum AppBackgroundStyle: String, CaseIterable, Identifiable {
 }
 
 enum AppSettingsSection: String, CaseIterable, Identifiable {
-    case general
+    case timer
     case automation
     case appearance
+    case notifications
+    case updates
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .general: return "General"
+        case .timer: return "Timer"
         case .automation: return "Automation"
         case .appearance: return "Appearance"
+        case .notifications: return "Notifications"
+        case .updates: return "Updates"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .timer: return "Interval lengths and how one flows into the next."
+        case .automation: return "What happens around a focus block."
+        case .appearance: return "Theme, light or dark, and the scene behind everything."
+        case .notifications: return "How Cadence tells you an interval ended."
+        case .updates: return "New versions straight from GitHub."
         }
     }
 
     var icon: String {
         switch self {
-        case .general: return "slider.horizontal.3"
+        case .timer: return "timer"
         case .automation: return "wand.and.stars"
         case .appearance: return "paintpalette.fill"
+        case .notifications: return "bell.badge.fill"
+        case .updates: return "arrow.down.circle.fill"
         }
     }
 }

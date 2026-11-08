@@ -169,11 +169,21 @@ A running interval is saved too: after a relaunch it continues where it was, or 
 ## Releasing
 
 ```bash
-scripts/release.sh 1.2.0            # notes generated from commits
-scripts/release.sh 1.2.0 notes.md   # or your own notes
+scripts/release.sh 1.2.0
 ```
 
-The script needs a clean working tree. It bumps the version in `project.yml`, runs the tests, builds `dist/Cadence-1.2.0.zip`, commits, tags `v1.2.0`, pushes, and publishes the GitHub release. Installed copies pick the release up through the in-app updater, which reads `CadenceUpdateRepository` in `App/Info.plist`.
+The script needs a clean working tree. It bumps the version in `project.yml`, runs the tests, commits, tags `v1.2.0`, and pushes. The tag starts the **Release** workflow, which:
+
+1. checks that the tag matches the app version
+2. runs the Rust tests
+3. builds the app on a macOS runner
+4. publishes the GitHub release with `Cadence-1.2.0.zip`
+
+Installed copies pick the release up through the in-app updater. To rebuild an existing tag, run the workflow manually from the Actions tab.
+
+## Continuous integration
+
+Every push to `main` and every pull request runs **CI**: the Rust core tests on Linux, and a full Release build of the macOS app. The app is uploaded as a downloadable artifact for 7 days, and a single **Check** job reports the overall result.
 
 ## Tests
 

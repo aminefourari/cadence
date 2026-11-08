@@ -15,7 +15,7 @@ final class AppModel: ObservableObject {
     @Published var showSettings = false
     @Published var showIntentionPrompt = false
     @Published var showShutdown = false
-    @Published var settingsSection: AppSettingsSection = .general
+    @Published var settingsSection: AppSettingsSection = .timer
     @Published var toast: ToastMessage?
     @Published private(set) var coreError: String?
     @Published var themeMode: AppThemeMode {
@@ -328,7 +328,7 @@ final class AppModel: ObservableObject {
         Updater.shared.checkAutomaticallyIfDue { [weak self] release in
             self?.showToast(
                 "Cadence \(release.version) is available",
-                "Install it from Preferences → General.",
+                "Install it from Preferences → Updates.",
                 icon: "arrow.down.circle.fill",
                 tint: Theme.mint
             )
@@ -590,8 +590,11 @@ final class AppModel: ObservableObject {
         performTimerCommand("timer.select", phase: phase)
     }
 
+    /// Applies interval settings immediately. An interval already in progress keeps
+    /// its length; the new lengths start with the next interval.
     @discardableResult
     func saveTimerConfig(_ config: PomodoroConfig) -> Bool {
+        guard config != timer.config else { return true }
         do {
             let state = try CoreClient.shared.performTimer(
                 "timer.configure",
@@ -601,12 +604,6 @@ final class AppModel: ObservableObject {
             )
             applyTimer(state)
             refreshPlan()
-            showToast(
-                "Intervals updated",
-                "Your next session uses the new rhythm.",
-                icon: "slider.horizontal.3",
-                tint: Theme.mint
-            )
             return true
         } catch {
             showToast(
@@ -848,7 +845,7 @@ final class AppModel: ObservableObject {
         setTheme(themeMode == .dynamic ? .cozy : .dynamic)
     }
 
-    func openSettings(_ section: AppSettingsSection = .general) {
+    func openSettings(_ section: AppSettingsSection = .timer) {
         settingsSection = section
         showSettings = true
     }

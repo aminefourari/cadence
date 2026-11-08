@@ -259,16 +259,22 @@ impl PomodoroEngine {
         self.intention = None;
     }
 
+    /// Applies new settings without interrupting the interval in progress: a started
+    /// (running or paused) interval keeps its length, and the new lengths apply from
+    /// the next interval. An untouched interval picks up the new length immediately.
     pub fn configure(&mut self, config: PomodoroConfig) {
+        let current_total = self.total_ms();
+        let untouched = !self.running && self.remaining_ms == current_total && self.length_override_ms.is_none();
         self.config = config.normalized();
         self.completed_in_cycle = self
             .completed_in_cycle
             .min(self.config.sessions_before_long_break.saturating_sub(1));
-        self.running = false;
-        self.ends_at_ms = None;
-        self.length_override_ms = None;
-        self.remaining_ms = self.phase.duration_ms(&self.config);
-        self.intention = None;
+        if untouched {
+            self.remaining_ms = self.phase.duration_ms(&self.config);
+        } else {
+            let new_total = self.phase.duration_ms(&self.config);
+            self.length_override_ms = (current_total != new_total).then_some(current_total);
+        }
     }
 
     pub fn skip(&mut self, now_ms: u64, stats: &mut crate::storage::Stats) {
@@ -478,6 +484,27 @@ mod tests {
         // Break, then the next focus is back to the configured 25 minutes.
         engine.skip(20 * 60_000, &mut stats);
         assert_eq!(engine.state(0, &stats).total_ms, 25 * 60_000);
+    }
+
+    #[test]
+    fn configure_keeps_a_running_interval_and_applies_next_time() {
+        let mut engine = PomodoroEngine::new(PomodoroConfig::default());
+        let mut stats = stats();
+        engine.start(0);
+        engine.configure(PomodoroConfig { focus_minutes: 50, ..PomodoroConfig::default() });
+        let state = engine.state(60_000, &stats);
+        assert!(state.running);
+        assert_eq!(state.total_ms, 25 * 60_000);
+        assert_eq!(state.remaining_ms, 24 * 60_000);
+
+        assert!(engine.tick(25 * 60_000, &mut stats));
+        assert_eq!(stats.today_focus_minutes, 25);
+        engine.skip(25 * 60_000, &mut stats);
+        assert_eq!(engine.state(0, &stats).total_ms, 50 * 60_000);
+
+        // An untouched interval takes the new length right away.
+        engine.configure(PomodoroConfig { focus_minutes: 30, ..PomodoroConfig::default() });
+        assert_eq!(engine.state(0, &stats).remaining_ms, 30 * 60_000);
     }
 
     #[test]

@@ -1,0 +1,134 @@
+name: Release
+
+# Publishes a GitHub release for a version tag. Installed copies of Cadence pick
+# it up through the in-app updater (App/Sources/Updater.swift), which installs
+# the .zip asset of the latest release. Create the tag with scripts/release.sh.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish, for example v1.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # The app's version comes from project.yml; a tag that disagrees would ship
+      # an app the updater can never reach (it compares versions).
+      - id: meta
+        name: Resolve version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          app_version="$(sed -nE 's/.*MARKETING_VERSION: "([^"]*)".*/\1/p' project.yml)"
+          if [ "$version" != "$app_version" ]; then
+            echo "::error::Tag $TAG does not match MARKETING_VERSION $app_version in project.yml"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Rust core tests
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.tag }}
+
+      - name: Test
+        working-directory: core
+        run: cargo test --locked
+
+  build:
+    name: Desktop macOS arm64
+    needs: [preflight, test]
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.tag }}
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild -project Cadence.xcodeproj -scheme Cadence -configuration Release \
+            -derivedDataPath build-release build | tail -n 40
+
+      - name: Verify and package
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          app=build-release/Build/Products/Release/Cadence.app
+          built="$(defaults read "$PWD/$app/Contents/Info.plist" CFBundleShortVersionString)"
+          test "$built" = "$VERSION" || { echo "::error::Built $built, expected $VERSION"; exit 1; }
+          codesign --verify --deep --strict "$app"
+          ditto -c -k --norsrc --keepParent "$app" "Cadence-$VERSION.zip"
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-app
+          path: Cadence-*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs: [preflight, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Download app
+        uses: actions/download-artifact@v4
+        with:
+          name: release-app
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "Cadence-$VERSION.zip" --clobber
+          else
+            gh release create "$TAG" "Cadence-$VERSION.zip" --title "Cadence $VERSION" --generate-notes --verify-tag
+          fi

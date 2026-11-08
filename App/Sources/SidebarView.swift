@@ -114,7 +114,7 @@ struct SidebarView: View {
 
     private var preferencesRow: some View {
         Button {
-            model.openSettings(.general)
+            model.openSettings()
         } label: {
             HStack(spacing: Theme.s(10)) {
                 Image(systemName: "slider.horizontal.3")

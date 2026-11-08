@@ -8,9 +8,10 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 - `make release` — Release build into `dist/Cadence.app`; `make zip` packages it
 - `make test` — Rust unit tests (`core/`, uses `.cargo-home`)
 - `cd core && CARGO_HOME=../.cargo-home cargo test --offline` — same, without make
-- `scripts/release.sh <version> [notes.md]` — bump version, test, build zip, tag, push, publish GitHub release (the in-app updater in `Updater.swift` reads releases from `CadenceUpdateRepository` in `App/Info.plist`)
+- `scripts/release.sh <version>` — bump version, test, commit, tag, push; `.github/workflows/release.yml` builds on macOS and publishes the GitHub release (the in-app updater in `Updater.swift` reads releases from `CadenceUpdateRepository` in `App/Info.plist`)
+- CI: `.github/workflows/ci.yml` (Rust tests on Linux, Release build on macOS, artifact upload)
 - `make project` — regenerate `Cadence.xcodeproj` from `project.yml` (needs xcodegen; checked-in project is used otherwise)
-- No Swift tests, no linter, no CI. `json_contract_matches_swift_models` (lib.rs) guards the JSON shape Swift decodes.
+- No Swift tests, no linter. `json_contract_matches_swift_models` (lib.rs) guards the JSON shape Swift decodes.
 - After adding/removing Swift files run `make project` (xcodegen) so the Xcode project picks them up.
 
 ## Layout

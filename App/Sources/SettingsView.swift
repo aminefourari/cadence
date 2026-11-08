@@ -6,55 +6,56 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft = PomodoroConfig.defaults
     @State private var loaded = false
-    @State private var section: AppSettingsSection = .general
+    @State private var section: AppSettingsSection = .timer
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Theme.inkDeep, Theme.ink, Theme.backgroundEnd],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            RadialGradient(
-                colors: [Theme.accent.opacity(Theme.isLight ? 0.09 : 0.13), .clear],
-                center: .topTrailing,
-                startRadius: 20,
-                endRadius: 560
-            )
+        HStack(spacing: 0) {
+            sidebar
+                .frame(width: 208)
+
+            Rectangle()
+                .fill(Theme.hairline)
+                .frame(width: 1)
 
             VStack(alignment: .leading, spacing: 0) {
-                header
+                contentHeader
+                    .padding(.horizontal, Theme.s(28))
+                    .padding(.top, Theme.s(24))
+                    .padding(.bottom, Theme.s(16))
 
-                tabBar
-                    .padding(.top, Theme.s(13))
-
-                Group {
-                    switch section {
-                    case .general: generalContent
-                    case .automation: automationContent
-                    case .appearance: appearanceContent
-                    }
+                ScrollView(.vertical, showsIndicators: false) {
+                    sectionContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, Theme.s(28))
+                        .padding(.bottom, Theme.s(24))
                 }
-                .padding(.top, Theme.s(16))
-
-                Spacer(minLength: 8)
-
-                footer
-                    .padding(.top, Theme.s(8))
-            }
-            .padding(Theme.s(22))
-
-            if let toast = model.toast {
-                VStack {
-                    ToastView(toast: toast)
-                        .padding(.top, Theme.s(14))
-                    Spacer()
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .zIndex(20)
+                .scrollBounceBehavior(.basedOnSize)
+                .id(section)
             }
         }
-        .frame(width: 580, height: 700)
+        .background {
+            ZStack {
+                LinearGradient(
+                    colors: [Theme.inkDeep, Theme.ink, Theme.backgroundEnd],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                RadialGradient(
+                    colors: [Theme.accent.opacity(Theme.isLight ? 0.08 : 0.11), .clear],
+                    center: .topTrailing,
+                    startRadius: 20,
+                    endRadius: 620
+                )
+            }
+        }
+        .overlay(alignment: .top) {
+            if let toast = model.toast {
+                ToastView(toast: toast)
+                    .padding(.top, Theme.s(14))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .frame(width: 800, height: 600)
         .preferredColorScheme(model.appearanceMode.colorScheme)
         .onAppear {
             section = model.settingsSection
@@ -66,52 +67,120 @@ struct SettingsView: View {
         .onChange(of: model.settingsSection) { _, next in
             section = next
         }
+        .onChange(of: draft) { _, next in
+            guard loaded else { return }
+            model.saveTimerConfig(next)
+        }
+        .onChange(of: model.timer.config) { _, next in
+            if next != draft { draft = next }
+        }
     }
 
-    private var tabBar: some View {
-        HStack(spacing: Theme.s(4)) {
-            ForEach(AppSettingsSection.allCases) { item in
-                Button {
-                    section = item
-                } label: {
-                    HStack(spacing: Theme.s(5)) {
-                        Image(systemName: item.icon)
-                            .font(Theme.font(9, .semibold))
-                        Text(item.title)
-                            .font(Theme.font(10, .semibold))
-                    }
-                    .foregroundStyle(section == item ? Theme.cream : Theme.mutedDim)
-                    .padding(.horizontal, Theme.s(11))
-                    .frame(height: 27)
-                    .background {
-                        Capsule().fill(section == item ? Theme.controlFillHover : .clear)
-                    }
-                    .contentShape(Rectangle())
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: Theme.s(4)) {
+            HStack(spacing: Theme.s(10)) {
+                CadenceMark(size: 30)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Preferences")
+                        .font(Theme.font(14, .semibold, design: .rounded))
+                        .foregroundStyle(Theme.cream)
+                    Text("Changes apply instantly")
+                        .font(Theme.font(9.5, .medium))
+                        .foregroundStyle(Theme.mutedDim)
                 }
-                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, Theme.s(8))
+            .padding(.top, Theme.s(22))
+            .padding(.bottom, Theme.s(18))
+
+            ForEach(AppSettingsSection.allCases) { item in
+                SettingsNavItem(
+                    section: item,
+                    selected: section == item,
+                    badge: item == .updates && updater.hasUpdate
+                ) {
+                    withAnimation(.easeOut(duration: 0.15)) { section = item }
+                }
+            }
+
+            Spacer()
+
+            Text("Cadence \(updater.currentVersion)")
+                .font(Theme.font(9.5, .medium, design: .monospaced))
+                .foregroundStyle(Theme.mutedDim)
+                .padding(.horizontal, Theme.s(8))
+                .padding(.bottom, Theme.s(16))
+        }
+        .padding(.horizontal, Theme.s(12))
+        .background(Theme.inkDeep.opacity(Theme.isLight ? 0.25 : 0.35))
+    }
+
+    private var contentHeader: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: Theme.s(4)) {
+                Text(section.title)
+                    .font(Theme.font(24, .semibold, design: .rounded))
+                    .foregroundStyle(Theme.cream)
+                Text(section.subtitle)
+                    .font(Theme.font(11, .medium))
+                    .foregroundStyle(Theme.muted)
             }
             Spacer()
+            Button {
+                dismiss()
+            } label: {
+                Text("Done")
+                    .font(Theme.font(11, .semibold))
+                    .foregroundStyle(Theme.onAccent)
+                    .padding(.horizontal, Theme.s(16))
+                    .frame(height: 30)
+                    .background { Capsule().fill(Theme.accent) }
+            }
+            .buttonStyle(PressableStyle())
+            .keyboardShortcut(.cancelAction)
+            .keyboardShortcut(.defaultAction)
         }
-        .padding(Theme.s(3))
-        .background { Capsule().fill(Theme.controlFill) }
-        .overlay { Capsule().strokeBorder(Theme.controlStroke, lineWidth: 1) }
     }
 
-    private var generalContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: Theme.s(14)) {
+    @ViewBuilder
+    private var sectionContent: some View {
+        switch section {
+        case .timer:
+            VStack(alignment: .leading, spacing: Theme.s(16)) {
                 intervalsSection
                 flowSection
-                notificationsSection
-                updatesSection
+                HStack {
+                    Text(model.timer.running || !model.timer.isFreshInterval
+                         ? "The interval in progress keeps its length. New lengths start with the next one."
+                         : "Changes apply right away.")
+                        .font(Theme.font(9.5, .medium))
+                        .foregroundStyle(Theme.mutedDim)
+                    Spacer()
+                    if draft != .defaults {
+                        SmallSettingsButton(title: "Restore defaults") { draft = .defaults }
+                    }
+                }
+                .padding(.horizontal, Theme.s(2))
             }
-            .padding(.bottom, Theme.s(4))
+        case .automation:
+            automationContent
+        case .appearance:
+            VStack(alignment: .leading, spacing: Theme.s(16)) {
+                appearanceSection
+                appearanceModesSection
+                animatedScenesSection
+                backgroundImageSection
+                backgroundVideoSection
+            }
+        case .notifications:
+            notificationsSection
+        case .updates:
+            updatesSection
         }
-        .scrollBounceBehavior(.basedOnSize)
     }
 
     private var updatesSection: some View {
-        SettingsSection(title: "Updates") {
+        SettingsSection(title: "This Mac") {
             HStack(spacing: Theme.s(12)) {
                 ZStack {
                     Circle()
@@ -275,53 +344,6 @@ struct SettingsView: View {
         }
         .padding(.horizontal, Theme.s(14))
         .frame(height: 48)
-    }
-
-    private var appearanceContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: Theme.s(12)) {
-                appearanceSection
-                appearanceModesSection
-                animatedScenesSection
-                backgroundImageSection
-                backgroundVideoSection
-            }
-            .padding(.bottom, Theme.s(4))
-        }
-        .scrollBounceBehavior(.basedOnSize)
-    }
-
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: Theme.s(4)) {
-                Text("Preferences")
-                    .font(Theme.font(25, .semibold, design: .rounded))
-                    .foregroundStyle(Theme.cream)
-                Text("Shape a rhythm that fits your day.")
-                    .font(Theme.font(11, .medium))
-                    .foregroundStyle(Theme.muted)
-            }
-
-            Spacer()
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(Theme.font(10, .bold))
-                    .foregroundStyle(Theme.muted)
-                    .frame(width: 28, height: 28)
-                    .background {
-                        Circle().fill(Theme.controlFill)
-                    }
-                    .overlay {
-                        Circle().strokeBorder(Theme.controlStroke, lineWidth: 1)
-                    }
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-        }
     }
 
     private var appearanceSection: some View {
@@ -563,7 +585,7 @@ struct SettingsView: View {
     }
 
     private var notificationsSection: some View {
-        SettingsSection(title: "Notifications") {
+        SettingsSection(title: "Interval alerts") {
             VStack(spacing: 0) {
                 HStack(spacing: Theme.s(12)) {
                     ZStack {
@@ -620,87 +642,42 @@ struct SettingsView: View {
         }
     }
 
-    private var footer: some View {
-        VStack(spacing: Theme.s(12)) {
-            Rectangle()
-                .fill(Theme.hairline)
-                .frame(height: 1)
+}
 
-            if section == .general {
-                HStack(spacing: Theme.s(12)) {
-                    Text("Saving resets the current interval.")
-                        .font(Theme.font(9.5, .medium))
-                        .foregroundStyle(Theme.mutedDim)
+private struct SettingsNavItem: View {
+    let section: AppSettingsSection
+    let selected: Bool
+    var badge = false
+    let action: () -> Void
 
-                    Spacer()
+    @State private var hovered = false
 
-                    Button {
-                        dismiss()
-                    } label: {
-                        Text("Cancel")
-                            .font(Theme.font(11.5, .medium))
-                            .foregroundStyle(Theme.muted)
-                            .padding(.horizontal, Theme.s(14))
-                            .frame(height: 34)
-                            .background {
-                                Capsule().fill(Theme.controlFill)
-                            }
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.cancelAction)
-
-                    Button {
-                        if model.saveTimerConfig(draft) {
-                            dismiss()
-                        }
-                    } label: {
-                        HStack(spacing: Theme.s(5)) {
-                            Text("Save changes")
-                                .font(Theme.font(11.5, .semibold))
-                            Image(systemName: "checkmark")
-                                .font(Theme.font(9, .bold))
-                        }
-                        .foregroundStyle(Theme.onAccent)
-                        .padding(.horizontal, Theme.s(16))
-                        .frame(height: 34)
-                        .background {
-                            Capsule().fill(Theme.accent)
-                        }
-                        .shadow(color: Theme.accent.opacity(0.25), radius: 12, x: 0, y: 5)
-                    }
-                    .buttonStyle(PressableStyle())
-                    .disabled(draft == model.timer.config)
-                    .opacity(draft == model.timer.config ? 0.55 : 1)
-                }
-            } else {
-                HStack(spacing: Theme.s(12)) {
-                    Text("These changes apply immediately.")
-                        .font(Theme.font(9.5, .medium))
-                        .foregroundStyle(Theme.mutedDim)
-
-                    Spacer()
-
-                    Button {
-                        dismiss()
-                    } label: {
-                        HStack(spacing: Theme.s(5)) {
-                            Text("Done")
-                                .font(Theme.font(11.5, .semibold))
-                            Image(systemName: "checkmark")
-                                .font(Theme.font(9, .bold))
-                        }
-                        .foregroundStyle(Theme.onAccent)
-                        .padding(.horizontal, Theme.s(18))
-                        .frame(height: 34)
-                        .background { Capsule().fill(Theme.accent) }
-                    }
-                    .buttonStyle(PressableStyle())
-                    .keyboardShortcut(.defaultAction)
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Theme.s(10)) {
+                Image(systemName: section.icon)
+                    .font(Theme.font(11, .semibold))
+                    .foregroundStyle(selected ? Theme.accent : Theme.muted)
+                    .frame(width: 18)
+                Text(section.title)
+                    .font(Theme.font(12, selected ? .semibold : .medium))
+                    .foregroundStyle(selected ? Theme.cream : Theme.muted)
+                Spacer()
+                if badge {
+                    Circle().fill(Theme.mint).frame(width: 7, height: 7)
                 }
             }
+            .padding(.horizontal, Theme.s(10))
+            .frame(height: 34)
+            .background {
+                RoundedRectangle(cornerRadius: Theme.radius(10), style: .continuous)
+                    .fill(selected ? Theme.controlFillHover : (hovered ? Theme.controlFill : .clear))
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
     }
-
 }
 
 private struct ThemeChoiceCard: View {

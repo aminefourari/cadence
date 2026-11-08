@@ -27,14 +27,14 @@ struct CadenceApp: App {
 
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {
-                    model.openSettings(.general)
+                    model.openSettings(.updates)
                     Task { await Updater.shared.check() }
                 }
             }
 
             CommandGroup(replacing: .appSettings) {
                 Button("Preferences…") {
-                    model.openSettings(.general)
+                    model.openSettings()
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }

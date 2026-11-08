@@ -30,6 +30,11 @@ final class Updater: ObservableObject {
 
     @Published private(set) var state: State = .idle
 
+    var hasUpdate: Bool {
+        if case .available = state { return true }
+        return false
+    }
+
     let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 
     private let repository = Bundle.main.object(forInfoDictionaryKey: "CadenceUpdateRepository") as? String
