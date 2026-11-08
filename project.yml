@@ -1,0 +1,69 @@
+name: Cadence
+options:
+  minimumXcodeGenVersion: "2.38.0"
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: YES
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: NO
+    ENABLE_APP_SANDBOX: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    CLANG_MODULE_CACHE_PATH: "$(PROJECT_DIR)/.module-cache"
+    SWIFT_MODULE_CACHE_PATH: "$(PROJECT_DIR)/.module-cache"
+    OTHER_SWIFT_FLAGS: "$(inherited) -disable-sandbox"
+targets:
+  Cadence:
+    type: application
+    platform: macOS
+    sources:
+      - path: App/Sources
+      - path: App/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.amine.cadence
+        PRODUCT_NAME: Cadence
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/Automation.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: App/Bridge/Cadence-Bridging-Header.h
+        LIBRARY_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(PROJECT_DIR)/core/target/release"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-lcadence_core"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: "1.0"
+        SWIFT_EMIT_LOC_STRINGS: YES
+    preBuildScripts:
+      - name: Build Rust core
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          ROOT="$PROJECT_DIR"
+          CARGO="${HOME}/.cargo/bin/cargo"
+          if [ ! -x "$CARGO" ]; then
+            CARGO="$(command -v cargo || true)"
+          fi
+          if [ -z "$CARGO" ] || [ ! -x "$CARGO" ]; then
+            echo "error: Cargo was not found. Install Rust from https://rustup.rs to build Cadence." >&2
+            exit 1
+          fi
+          mkdir -p "$ROOT/.cargo-home"
+          cd "$ROOT/core"
+          # Xcode exports MACOSX_DEPLOYMENT_TARGET=14.0. On current Apple toolchains
+          # that breaks proc-macro dylibs, so let Rust use its default (macOS 11)
+          # deployment floor and the app's own target handles the bundle.
+          unset MACOSX_DEPLOYMENT_TARGET
+          CARGO_HOME="$ROOT/.cargo-home" "$CARGO" build --release

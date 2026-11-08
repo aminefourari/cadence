@@ -1,0 +1,455 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		047CF97BA092A20AD9B34E3D /* IntentionCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A84BB1FBBDC223D415EAE12 /* IntentionCheckInView.swift */; };
+		061256A4E51C8885ECEAE6C5 /* FocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED8E97E528EA74AE8BC695E /* FocusView.swift */; };
+		09A9C1FCECD82F37977B920D /* YouTubePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B25491FFD0EE9EF9C7B51DA /* YouTubePlayer.swift */; };
+		0B996C87B49ED88E6C64F4FC /* MusicView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67C27EA81F8F43F8C9E5AE77 /* MusicView.swift */; };
+		1752F19C0E2F952586DD62B2 /* CoreClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4379BE91168428775C7BCE /* CoreClient.swift */; };
+		18D6E2F16EC875DB38E84763 /* ShutdownRitualView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE85E18C6DC7C9DA8A0205E3 /* ShutdownRitualView.swift */; };
+		2EEDA0F7F576C2471D2C3266 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45669D384F729B974A289D76 /* AppModel.swift */; };
+		42F812B5628C4737F6F2ABC6 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15160FDC4EFA23FB7BDABBD /* RootView.swift */; };
+		4985E9F46982010C95B3C4F5 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE41CC70363F0052C6AE9D26 /* DesignSystem.swift */; };
+		52653A3EF28CDB63EA03349D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DDB6F89AF92DAA058A40F2A6 /* Assets.xcassets */; };
+		5B3574FB61EF185B84EA3E9E /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691D0DA285C7BB1AF85FB6FF /* SidebarView.swift */; };
+		6066F24DB054CD0884680821 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C2DF62647FB2EE7E4991B89 /* Models.swift */; };
+		669C5DFDFD6066B91B988960 /* MenuBarWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 305F2985E43494E4C7E45169 /* MenuBarWidgetView.swift */; };
+		84BABE3353A33DE47C0AF5D7 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121B89E4EFE23929C2C93971 /* NotificationManager.swift */; };
+		C0C71E00CDDCF3CE5EFDE6A6 /* BraveImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F8CB72D39D16FC8D58ACD7 /* BraveImporter.swift */; };
+		CFFD38AB2C2E4DA807379320 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C54F892D42E5EC2FBAAC05D /* TasksView.swift */; };
+		E34E2CC2E269DAFBC4645A1B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96A5EF390551823810448BA6 /* SettingsView.swift */; };
+		E6C21F4DE08B83B79EB0DFFE /* CadenceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E888B08581711A9E56B581 /* CadenceApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0B25491FFD0EE9EF9C7B51DA /* YouTubePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubePlayer.swift; sourceTree = "<group>"; };
+		0B4379BE91168428775C7BCE /* CoreClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreClient.swift; sourceTree = "<group>"; };
+		121B89E4EFE23929C2C93971 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		1C54F892D42E5EC2FBAAC05D /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
+		2747B5C0BD75EFECA1D2569B /* Cadence.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cadence.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		305F2985E43494E4C7E45169 /* MenuBarWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarWidgetView.swift; sourceTree = "<group>"; };
+		30E888B08581711A9E56B581 /* CadenceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CadenceApp.swift; sourceTree = "<group>"; };
+		45669D384F729B974A289D76 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		5C2DF62647FB2EE7E4991B89 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		67C27EA81F8F43F8C9E5AE77 /* MusicView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicView.swift; sourceTree = "<group>"; };
+		691D0DA285C7BB1AF85FB6FF /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		6A84BB1FBBDC223D415EAE12 /* IntentionCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentionCheckInView.swift; sourceTree = "<group>"; };
+		7ED8E97E528EA74AE8BC695E /* FocusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusView.swift; sourceTree = "<group>"; };
+		96A5EF390551823810448BA6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A15160FDC4EFA23FB7BDABBD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		DDB6F89AF92DAA058A40F2A6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DE85E18C6DC7C9DA8A0205E3 /* ShutdownRitualView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShutdownRitualView.swift; sourceTree = "<group>"; };
+		E4F8CB72D39D16FC8D58ACD7 /* BraveImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BraveImporter.swift; sourceTree = "<group>"; };
+		EE41CC70363F0052C6AE9D26 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		6A9F1C3B6267176F20AE4B03 = {
+			isa = PBXGroup;
+			children = (
+				80927EF57C41AC62B2B634ED /* App */,
+				ADFE63F9A7B11522B6C8E81A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		73A4273111A8D8FD80C60BA7 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				45669D384F729B974A289D76 /* AppModel.swift */,
+				E4F8CB72D39D16FC8D58ACD7 /* BraveImporter.swift */,
+				30E888B08581711A9E56B581 /* CadenceApp.swift */,
+				0B4379BE91168428775C7BCE /* CoreClient.swift */,
+				EE41CC70363F0052C6AE9D26 /* DesignSystem.swift */,
+				7ED8E97E528EA74AE8BC695E /* FocusView.swift */,
+				6A84BB1FBBDC223D415EAE12 /* IntentionCheckInView.swift */,
+				305F2985E43494E4C7E45169 /* MenuBarWidgetView.swift */,
+				5C2DF62647FB2EE7E4991B89 /* Models.swift */,
+				67C27EA81F8F43F8C9E5AE77 /* MusicView.swift */,
+				121B89E4EFE23929C2C93971 /* NotificationManager.swift */,
+				A15160FDC4EFA23FB7BDABBD /* RootView.swift */,
+				96A5EF390551823810448BA6 /* SettingsView.swift */,
+				DE85E18C6DC7C9DA8A0205E3 /* ShutdownRitualView.swift */,
+				691D0DA285C7BB1AF85FB6FF /* SidebarView.swift */,
+				1C54F892D42E5EC2FBAAC05D /* TasksView.swift */,
+				0B25491FFD0EE9EF9C7B51DA /* YouTubePlayer.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		80927EF57C41AC62B2B634ED /* App */ = {
+			isa = PBXGroup;
+			children = (
+				FB0C07CAC467FEE1B1072F92 /* Resources */,
+				73A4273111A8D8FD80C60BA7 /* Sources */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		ADFE63F9A7B11522B6C8E81A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2747B5C0BD75EFECA1D2569B /* Cadence.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		FB0C07CAC467FEE1B1072F92 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				DDB6F89AF92DAA058A40F2A6 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1D9D0CF3C214130166213D80 /* Cadence */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 07126B28B5B904C139BBD128 /* Build configuration list for PBXNativeTarget "Cadence" */;
+			buildPhases = (
+				4109B4344C0282863E7FC4F0 /* Build Rust core */,
+				1F5350DE3B53E65CAAF89D1D /* Sources */,
+				BFA5A0EE784FE6F59E5E0293 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Cadence;
+			packageProductDependencies = (
+			);
+			productName = Cadence;
+			productReference = 2747B5C0BD75EFECA1D2569B /* Cadence.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		9FA114BF81E88A4D01B65D31 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					1D9D0CF3C214130166213D80 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 6735F591880E2DF1BC393107 /* Build configuration list for PBXProject "Cadence" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 6A9F1C3B6267176F20AE4B03;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = ADFE63F9A7B11522B6C8E81A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1D9D0CF3C214130166213D80 /* Cadence */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BFA5A0EE784FE6F59E5E0293 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				52653A3EF28CDB63EA03349D /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		4109B4344C0282863E7FC4F0 /* Build Rust core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust core";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nROOT=\"$PROJECT_DIR\"\nCARGO=\"/Users/amine/.cargo/bin/cargo\"\nif [ ! -x \"$CARGO\" ]; then\n  CARGO=\"$(command -v cargo || true)\"\nfi\nif [ -z \"$CARGO\" ] || [ ! -x \"$CARGO\" ]; then\n  echo \"error: Cargo was not found. Install Rust from https://rustup.rs to build Cadence.\" >&2\n  exit 1\nfi\nmkdir -p \"$ROOT/.cargo-home\"\ncd \"$ROOT/core\"\n# Xcode exports MACOSX_DEPLOYMENT_TARGET=14.0. On current Apple toolchains\n# that breaks proc-macro dylibs, so let Rust use its default (macOS 11)\n# deployment floor and the app's own target handles the bundle.\nunset MACOSX_DEPLOYMENT_TARGET\nCARGO_HOME=\"$ROOT/.cargo-home\" \"$CARGO\" build --release\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1F5350DE3B53E65CAAF89D1D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2EEDA0F7F576C2471D2C3266 /* AppModel.swift in Sources */,
+				C0C71E00CDDCF3CE5EFDE6A6 /* BraveImporter.swift in Sources */,
+				E6C21F4DE08B83B79EB0DFFE /* CadenceApp.swift in Sources */,
+				1752F19C0E2F952586DD62B2 /* CoreClient.swift in Sources */,
+				4985E9F46982010C95B3C4F5 /* DesignSystem.swift in Sources */,
+				061256A4E51C8885ECEAE6C5 /* FocusView.swift in Sources */,
+				047CF97BA092A20AD9B34E3D /* IntentionCheckInView.swift in Sources */,
+				669C5DFDFD6066B91B988960 /* MenuBarWidgetView.swift in Sources */,
+				6066F24DB054CD0884680821 /* Models.swift in Sources */,
+				0B996C87B49ED88E6C64F4FC /* MusicView.swift in Sources */,
+				84BABE3353A33DE47C0AF5D7 /* NotificationManager.swift in Sources */,
+				42F812B5628C4737F6F2ABC6 /* RootView.swift in Sources */,
+				E34E2CC2E269DAFBC4645A1B /* SettingsView.swift in Sources */,
+				18D6E2F16EC875DB38E84763 /* ShutdownRitualView.swift in Sources */,
+				5B3574FB61EF185B84EA3E9E /* SidebarView.swift in Sources */,
+				CFFD38AB2C2E4DA807379320 /* TasksView.swift in Sources */,
+				09A9C1FCECD82F37977B920D /* YouTubePlayer.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0AC6D37A18265C6868E862C8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = App/Automation.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/core/target/release",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lcadence_core",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.amine.cadence;
+				PRODUCT_NAME = Cadence;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "App/Bridge/Cadence-Bridging-Header.h";
+			};
+			name = Debug;
+		};
+		66FA57B5F57FFDBD1C1E8963 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = App/Automation.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/core/target/release",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lcadence_core",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.amine.cadence;
+				PRODUCT_NAME = Cadence;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "App/Bridge/Cadence-Bridging-Header.h";
+			};
+			name = Release;
+		};
+		9DBE9E0079A7DB194A03BF0C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_MODULE_CACHE_PATH = "$(PROJECT_DIR)/.module-cache";
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_SWIFT_FLAGS = "$(inherited) -disable-sandbox";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_MODULE_CACHE_PATH = "$(PROJECT_DIR)/.module-cache";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C78721ED836CA881972A504D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_MODULE_CACHE_PATH = "$(PROJECT_DIR)/.module-cache";
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_SWIFT_FLAGS = "$(inherited) -disable-sandbox";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_MODULE_CACHE_PATH = "$(PROJECT_DIR)/.module-cache";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		07126B28B5B904C139BBD128 /* Build configuration list for PBXNativeTarget "Cadence" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0AC6D37A18265C6868E862C8 /* Debug */,
+				66FA57B5F57FFDBD1C1E8963 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6735F591880E2DF1BC393107 /* Build configuration list for PBXProject "Cadence" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C78721ED836CA881972A504D /* Debug */,
+				9DBE9E0079A7DB194A03BF0C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 9FA114BF81E88A4D01B65D31 /* Project object */;
+}

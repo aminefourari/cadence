@@ -1,0 +1,12 @@
+.DS_Store
+build/
+build-release/
+.cargo-home/
+.module-cache/
+.tmpcheck/
+core/target/
+dist/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+background-test.png
