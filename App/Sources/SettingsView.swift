@@ -180,7 +180,25 @@ struct SettingsView: View {
     }
 
     private var updatesSection: some View {
-        SettingsSection(title: "This Mac") {
+        VStack(alignment: .leading, spacing: Theme.s(16)) {
+            SettingsSection(title: "This Mac") {
+                updateStatusRow
+            }
+            SettingsSection(title: "Delivery") {
+                toggleRow(
+                    icon: "arrow.triangle.2.circlepath",
+                    tint: Theme.mint,
+                    title: "Install updates automatically",
+                    caption: "Downloads new releases in the background and restarts when you're not focusing or listening.",
+                    isOn: $updater.installAutomatically
+                )
+                .panel(cornerRadius: Theme.radius(18))
+            }
+            SmallSettingsButton(title: "All releases on GitHub") { NSWorkspace.shared.open(updater.releasesPage) }
+        }
+    }
+
+    private var updateStatusRow: some View {
             HStack(spacing: Theme.s(12)) {
                 ZStack {
                     Circle()
@@ -201,11 +219,11 @@ struct SettingsView: View {
                 }
                 Spacer()
                 switch updater.state {
-                case .checking, .installing:
+                case .checking, .installing, .downloading:
                     ProgressView().controlSize(.small)
-                case .available(let release):
+                case .available(let release), .ready(let release):
                     SmallSettingsButton(title: "Release notes") { NSWorkspace.shared.open(release.pageURL) }
-                    SmallSettingsButton(title: "Install \(release.version)") {
+                    SmallSettingsButton(title: "Restart & install") {
                         Task { await updater.install(release) }
                     }
                 default:
@@ -217,16 +235,17 @@ struct SettingsView: View {
             .padding(.horizontal, Theme.s(14))
             .frame(height: 58)
             .panel(cornerRadius: Theme.radius(18))
-        }
     }
 
     private var updateStatus: String {
         switch updater.state {
-        case .idle: return "Checks GitHub for new releases once a day."
+        case .idle: return "Checks GitHub for new releases every few hours."
         case .checking: return "Checking for updates…"
         case .upToDate: return "You're on the latest version."
-        case .available(let release): return "Version \(release.version) is ready to install. Cadence restarts to finish."
-        case .installing: return "Downloading and installing… Cadence will restart."
+        case .available(let release): return "Version \(release.version) is available. Cadence restarts to install it."
+        case .downloading(let release): return "Downloading version \(release.version)…"
+        case .ready(let release): return "Version \(release.version) installs when you're not focusing, or when you quit."
+        case .installing: return "Installing… Cadence will restart."
         case .failed(let message): return message
         }
     }

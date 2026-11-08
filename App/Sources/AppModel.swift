@@ -325,15 +325,14 @@ final class AppModel: ObservableObject {
         startTicker()
         Task { await refreshNotificationStatus() }
         #if !DEBUG
-        Updater.shared.checkAutomaticallyIfDue { [weak self] release in
-            self?.showToast(
-                "Cadence \(release.version) is available",
-                "Install it from Preferences → Updates.",
-                icon: "arrow.down.circle.fill",
-                tint: Theme.mint
-            )
+        // Restarting to install an update must never interrupt a focus block or music.
+        Updater.shared.isIdle = { [weak self] in
+            guard let self else { return true }
+            return !self.timer.running && !self.player.isPlaying
         }
+        Updater.shared.startAutomaticUpdates()
         #endif
+        announceUpdateIfJustInstalled()
     }
 
     private func startTicker() {
@@ -442,6 +441,15 @@ final class AppModel: ObservableObject {
         }
         let soundName = transition.completedPhase == .focus ? "Glass" : "Ping"
         NSSound(named: NSSound.Name(soundName))?.play()
+    }
+
+    private func announceUpdateIfJustInstalled() {
+        let key = "cadence.lastRunVersion"
+        let current = Updater.shared.currentVersion
+        let previous = UserDefaults.standard.string(forKey: key)
+        UserDefaults.standard.set(current, forKey: key)
+        guard let previous, Updater.isNewer(current, than: previous) else { return }
+        showToast("Updated to Cadence \(current)", "See what's new on the releases page.", icon: "sparkles", tint: Theme.mint)
     }
 
     // MARK: - Focus side effects
