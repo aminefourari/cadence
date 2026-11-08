@@ -73,10 +73,24 @@ struct CoreClient {
         return try call(request, as: TimerState.self)
     }
 
+    func setLength(minutes: Int, nowMs: Int, day: String) throws -> TimerState {
+        try call(
+            ["cmd": "timer.setLength", "minutes": minutes, "nowMs": nowMs, "day": day],
+            as: TimerState.self
+        )
+    }
+
     func tasks(nowMs: Int, day: String) throws -> [TaskItem] {
         try call(
             ["cmd": "tasks.list", "nowMs": nowMs, "day": day],
             as: [TaskItem].self
+        )
+    }
+
+    func sessions(nowMs: Int, day: String) throws -> [FocusSession] {
+        try call(
+            ["cmd": "sessions.list", "nowMs": nowMs, "day": day],
+            as: [FocusSession].self
         )
     }
 

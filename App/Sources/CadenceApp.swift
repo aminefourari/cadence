@@ -4,8 +4,14 @@ import SwiftUI
 @main
 struct CadenceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var model = AppModel()
-    @StateObject private var player = YouTubePlayerController()
+    @StateObject private var model: AppModel
+    @StateObject private var player: YouTubePlayerController
+
+    init() {
+        let player = YouTubePlayerController()
+        _player = StateObject(wrappedValue: player)
+        _model = StateObject(wrappedValue: AppModel(player: player))
+    }
 
     var body: some Scene {
         Window("Cadence", id: "main") {
@@ -18,6 +24,13 @@ struct CadenceApp: App {
         .defaultSize(width: 1080, height: 760)
         .commands {
             CommandGroup(replacing: .newItem) {}
+
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    model.openSettings(.general)
+                    Task { await Updater.shared.check() }
+                }
+            }
 
             CommandGroup(replacing: .appSettings) {
                 Button("Preferences…") {
@@ -58,6 +71,11 @@ struct CadenceApp: App {
                     model.selectTab(.music)
                 }
                 .keyboardShortcut("3", modifiers: .command)
+
+                Button("History") {
+                    model.selectTab(.history)
+                }
+                .keyboardShortcut("4", modifiers: .command)
 
                 Divider()
 

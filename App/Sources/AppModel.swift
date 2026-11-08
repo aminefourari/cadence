@@ -9,6 +9,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var timer: TimerState = .placeholder
     @Published private(set) var tasks: [TaskItem] = []
     @Published private(set) var plan: DayPlan = .empty
+    @Published private(set) var sessions: [FocusSession] = []
     @Published private(set) var notificationsAuthorized = false
     @Published private(set) var currentDate = Date()
     @Published var showSettings = false
@@ -40,6 +41,7 @@ final class AppModel: ObservableObject {
         }
     }
     @Published private(set) var backgroundImage: NSImage?
+    @Published private(set) var backgroundVideoURL: URL?
     @Published var dailyTargetMinutes: Int {
         didSet {
             let clamped = min(720, max(30, dailyTargetMinutes))
@@ -52,6 +54,36 @@ final class AppModel: ObservableObject {
         }
     }
 
+    @Published var musicFollowsTimer: Bool {
+        didSet { UserDefaults.standard.set(musicFollowsTimer, forKey: Self.musicFollowsKey) }
+    }
+    @Published var focusGuardEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(focusGuardEnabled, forKey: Self.focusGuardKey)
+            focusGuard.isEnabled = focusGuardEnabled
+        }
+    }
+    /// Comma-separated app names that trigger a nudge during focus.
+    @Published var distractingApps: String {
+        didSet {
+            UserDefaults.standard.set(distractingApps, forKey: Self.distractingAppsKey)
+            focusGuard.appNames = Self.parseAppNames(distractingApps)
+        }
+    }
+    /// Shortcuts (Shortcuts.app) run when focus starts / stops, e.g. to toggle a macOS Focus mode.
+    @Published var focusStartShortcut: String {
+        didSet { UserDefaults.standard.set(focusStartShortcut, forKey: Self.focusStartShortcutKey) }
+    }
+    @Published var focusEndShortcut: String {
+        didSet { UserDefaults.standard.set(focusEndShortcut, forKey: Self.focusEndShortcutKey) }
+    }
+
+    private static let musicFollowsKey = "cadence.musicFollowsTimer"
+    private static let focusGuardKey = "cadence.focusGuard"
+    private static let distractingAppsKey = "cadence.distractingApps"
+    private static let focusStartShortcutKey = "cadence.focusStartShortcut"
+    private static let focusEndShortcutKey = "cadence.focusEndShortcut"
+    static let defaultDistractingApps = "Messages, Slack, Discord, Mail, WhatsApp, Telegram"
     private static let themeKey = "cadence.theme"
     private static let appearanceKey = "cadence.appearance"
     private static let backgroundKey = "cadence.backgroundStyle"
@@ -61,14 +93,27 @@ final class AppModel: ObservableObject {
 
     private var ticker: Timer?
     private var lastTransitionID = 0
+    private var scheduledEndMs: Int?
     private var lastPlanRefresh = Date.distantPast
     private var toastWorkItem: DispatchWorkItem?
     private var hasRequestedNotifications = false
     private let storagePath: String
     private let backgroundImageURL: URL
+    private let appFolder: URL
     private let dayFormatter: DateFormatter
+    private let player: YouTubePlayerController
+    private let focusGuard = FocusGuard()
+    private var musicPausedByTimer = false
 
-    init() {
+    init(player: YouTubePlayerController) {
+        self.player = player
+        let defaults = UserDefaults.standard
+        musicFollowsTimer = defaults.object(forKey: Self.musicFollowsKey) as? Bool ?? true
+        focusGuardEnabled = defaults.bool(forKey: Self.focusGuardKey)
+        distractingApps = defaults.string(forKey: Self.distractingAppsKey) ?? Self.defaultDistractingApps
+        focusStartShortcut = defaults.string(forKey: Self.focusStartShortcutKey) ?? ""
+        focusEndShortcut = defaults.string(forKey: Self.focusEndShortcutKey) ?? ""
+
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -104,6 +149,7 @@ final class AppModel: ObservableObject {
         let supportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
         let appFolder = supportURL.appendingPathComponent("Cadence", isDirectory: true)
+        self.appFolder = appFolder
         try? fileManager.createDirectory(at: appFolder, withIntermediateDirectories: true)
         let demoData = arguments.contains("--demo-data")
         storagePath = appFolder.appendingPathComponent(demoData ? "core-demo.json" : "core-state.json").path
@@ -113,7 +159,7 @@ final class AppModel: ObservableObject {
             .flatMap(AppBackgroundStyle.init(rawValue:)) ?? .animated
         backgroundStyle = savedBackground
         let savedScene = UserDefaults.standard.string(forKey: Self.animatedBackgroundKey)
-            .flatMap(AnimatedBackground.init(rawValue:)) ?? .aurora
+            .flatMap(AnimatedBackground.init(rawValue:)) ?? .rainyForest
         animatedBackground = savedScene
         if let sceneArg = arguments.first(where: { $0.hasPrefix("--background-scene=") }),
            let scene = AnimatedBackground(rawValue: String(sceneArg.dropFirst("--background-scene=".count))) {
@@ -122,6 +168,10 @@ final class AppModel: ObservableObject {
         }
         if let savedImage = NSImage(contentsOf: backgroundImageURL) {
             backgroundImage = savedImage
+        }
+        backgroundVideoURL = Self.storedBackgroundVideo(in: appFolder)
+        if backgroundStyle == .video && backgroundVideoURL == nil {
+            backgroundStyle = .animated
         }
         if let imageArg = arguments.first(where: { $0.hasPrefix("--background-image=") }) {
             let path = String(imageArg.dropFirst("--background-image=".count))
@@ -156,6 +206,12 @@ final class AppModel: ObservableObject {
                 self?.settingsSection = requestedSection
                 self?.showSettings = true
             }
+        }
+
+        focusGuard.isEnabled = focusGuardEnabled
+        focusGuard.appNames = Self.parseAppNames(distractingApps)
+        focusGuard.onDistraction = { [weak self] appName in
+            self?.nudgeBackToFocus(from: appName)
         }
 
         bootstrap()
@@ -254,6 +310,8 @@ final class AppModel: ObservableObject {
             timer = state
             lastTransitionID = state.transition?.id ?? 0
             reloadTasks()
+            reloadSessions()
+            syncScheduledNotification()
             refreshPlan()
         } catch {
             coreError = error.localizedDescription
@@ -266,6 +324,16 @@ final class AppModel: ObservableObject {
         }
         startTicker()
         Task { await refreshNotificationStatus() }
+        #if !DEBUG
+        Updater.shared.checkAutomaticallyIfDue { [weak self] release in
+            self?.showToast(
+                "Cadence \(release.version) is available",
+                "Install it from Preferences → General.",
+                icon: "arrow.down.circle.fill",
+                tint: Theme.mint
+            )
+        }
+        #endif
     }
 
     private func startTicker() {
@@ -295,49 +363,145 @@ final class AppModel: ObservableObject {
     }
 
     private func applyTimer(_ state: TimerState, notify: Bool = true) {
+        let previouslyScheduled = scheduledEndMs != nil
+        let previousTimer = timer
         timer = state
+        syncScheduledNotification()
+        let wasFocusing = previousTimer.running && previousTimer.phase == .focus
+        let isFocusing = state.running && state.phase == .focus
+        if wasFocusing != isFocusing {
+            focusActivityChanged(isFocusing)
+        }
         guard let transition = state.transition, transition.id > lastTransitionID else { return }
         lastTransitionID = transition.id
         if !transition.skipped {
             if transition.completedPhase == .focus {
                 reloadTasks()
+                reloadSessions()
                 refreshPlan()
             }
             if notify {
-                handleTransition(transition)
+                handleTransition(transition, alreadyNotified: previouslyScheduled)
             }
         }
     }
 
-    private func handleTransition(_ transition: TimerTransition) {
-        let nextMinutes = timer.config.minutes(for: transition.nextPhase)
-        let completedTask = activeTask
-        let title: String
-        let message: String
-        let icon: String
-        let tint: Color
+    /// Keeps exactly one pending system notification for the running interval's end.
+    private func syncScheduledNotification() {
+        let endsAt = timer.running ? timer.endsAtMs : nil
+        guard endsAt != scheduledEndMs else { return }
+        NotificationManager.shared.cancelPhaseEnd()
+        scheduledEndMs = nil
+        guard let endsAt else { return }
+        let next = predictedNextPhase()
+        let copy = transitionCopy(completed: timer.phase, next: next, task: activeTask)
+        NotificationManager.shared.schedulePhaseEnd(
+            at: Date(timeIntervalSince1970: Double(endsAt) / 1000),
+            title: copy.title,
+            body: copy.message
+        )
+        scheduledEndMs = endsAt
+    }
 
-        switch transition.completedPhase {
+    private func predictedNextPhase() -> PomodoroPhase {
+        guard timer.phase == .focus else { return .focus }
+        return timer.completedInCycle + 1 >= timer.cycleLength ? .longBreak : .shortBreak
+    }
+
+    private func transitionCopy(
+        completed: PomodoroPhase,
+        next: PomodoroPhase,
+        task: TaskItem?
+    ) -> (title: String, message: String) {
+        let nextMinutes = timer.config.minutes(for: next)
+        switch completed {
         case .focus:
-            title = transition.nextPhase == .longBreak ? "Long break earned" : "Focus complete"
-            if let completedTask {
-                message = "\(completedTask.title) · your \(nextMinutes)-minute break is ready."
-            } else {
-                message = "Your \(nextMinutes)-minute \(transition.nextPhase.title.lowercased()) is ready."
+            let title = next == .longBreak ? "Long break earned" : "Focus complete"
+            if let task {
+                return (title, "\(task.title) · your \(nextMinutes)-minute break is ready.")
             }
-            icon = "checkmark.circle.fill"
-            tint = Theme.accent
+            return (title, "Your \(nextMinutes)-minute \(next.title.lowercased()) is ready.")
         case .shortBreak, .longBreak:
-            title = "Break complete"
-            message = "Ready for another \(nextMinutes)-minute focus interval."
-            icon = "sunrise.fill"
-            tint = Theme.mint
+            return ("Break complete", "Ready for another \(nextMinutes)-minute focus interval.")
         }
+    }
+
+    private func handleTransition(_ transition: TimerTransition, alreadyNotified: Bool) {
+        let copy = transitionCopy(
+            completed: transition.completedPhase,
+            next: transition.nextPhase,
+            task: activeTask
+        )
+        let (title, message) = copy
+        let icon = transition.completedPhase == .focus ? "checkmark.circle.fill" : "sunrise.fill"
+        let tint = transition.completedPhase == .focus ? Theme.accent : Theme.mint
 
         showToast(title, message, icon: icon, tint: tint)
-        NotificationManager.shared.post(title: title, body: message)
+        if !alreadyNotified {
+            NotificationManager.shared.post(title: title, body: message)
+        }
         let soundName = transition.completedPhase == .focus ? "Glass" : "Ping"
         NSSound(named: NSSound.Name(soundName))?.play()
+    }
+
+    // MARK: - Focus side effects
+
+    /// Called whenever a focus interval starts running or stops (pause, end, skip, reset).
+    private func focusActivityChanged(_ focusing: Bool) {
+        focusGuard.update(focusRunning: focusing)
+        runShortcut(named: focusing ? focusStartShortcut : focusEndShortcut)
+
+        guard musicFollowsTimer, player.hasVideo else { return }
+        if focusing {
+            if musicPausedByTimer {
+                musicPausedByTimer = false
+                player.play()
+            }
+        } else if player.isPlaying {
+            musicPausedByTimer = true
+            player.pause()
+        }
+    }
+
+    private func runShortcut(named name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
+        process.arguments = ["run", name]
+        process.terminationHandler = { process in
+            guard process.terminationStatus != 0 else { return }
+            Task { @MainActor [weak self] in
+                self?.showToast(
+                    "Shortcut didn't run",
+                    "Check that “\(name)” exists in the Shortcuts app.",
+                    icon: "exclamationmark.triangle.fill",
+                    tint: Theme.amber
+                )
+            }
+        }
+        do {
+            try process.run()
+        } catch {
+            showToast("Shortcut didn't run", error.localizedDescription, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+        }
+    }
+
+    private func nudgeBackToFocus(from appName: String) {
+        let minutes = max(1, timer.remainingSeconds / 60)
+        let task = activeTask.map { " on \($0.title)" } ?? ""
+        NotificationManager.shared.post(
+            title: "Still focusing",
+            body: "\(appName) can wait. \(minutes) min left\(task)."
+        )
+    }
+
+    private static func parseAppNames(_ raw: String) -> Set<String> {
+        Set(
+            raw.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+                .filter { !$0.isEmpty }
+        )
     }
 
     // MARK: - Navigation
@@ -369,9 +533,22 @@ final class AppModel: ObservableObject {
         performTimerCommand("timer.resume")
     }
 
-    func beginFocus(intention: String) {
+    /// Sets a one-off length for the current (not yet running) interval.
+    func setIntervalLength(_ minutes: Int) {
+        guard !timer.running, minutes != timer.intervalMinutes else { return }
+        do {
+            applyTimer(try CoreClient.shared.setLength(minutes: minutes, nowMs: CoreClient.nowMs(), day: currentDay))
+        } catch {
+            showToast("Couldn't change the length", error.localizedDescription, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+        }
+    }
+
+    func beginFocus(intention: String, minutes: Int? = nil) {
         showIntentionPrompt = false
         requestNotificationsIfNeeded()
+        if let minutes {
+            setIntervalLength(minutes)
+        }
         let trimmed = intention.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             let state = try CoreClient.shared.performTimer(
@@ -624,6 +801,14 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func reloadSessions() {
+        do {
+            sessions = try CoreClient.shared.sessions(nowMs: CoreClient.nowMs(), day: currentDay)
+        } catch {
+            coreError = error.localizedDescription
+        }
+    }
+
     func refreshPlan() {
         do {
             plan = try CoreClient.shared.buildPlan(
@@ -673,6 +858,10 @@ final class AppModel: ObservableObject {
     func setBackgroundStyle(_ style: AppBackgroundStyle) {
         if style == .image && backgroundImage == nil {
             chooseBackgroundImage()
+            return
+        }
+        if style == .video && backgroundVideoURL == nil {
+            chooseBackgroundVideo()
             return
         }
         withAnimation(.easeInOut(duration: 0.35)) {
@@ -731,6 +920,51 @@ final class AppModel: ObservableObject {
             backgroundStyle = .animated
         }
         showToast("Back to \(animatedBackground.title)", "Your imported background was removed.", icon: "sparkles", tint: Theme.mint)
+    }
+
+    func chooseBackgroundVideo() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.movie]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.prompt = "Use as background"
+        panel.message = "Choose a video loop, e.g. rain on a café window. It plays muted."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // A new file name each time, so the player notices the change.
+        let destination = appFolder.appendingPathComponent(
+            "background-video-\(Int(Date().timeIntervalSince1970)).\(url.pathExtension.lowercased())"
+        )
+        do {
+            try FileManager.default.copyItem(at: url, to: destination)
+            if let old = backgroundVideoURL {
+                try? FileManager.default.removeItem(at: old)
+            }
+            withAnimation(.easeInOut(duration: 0.4)) {
+                backgroundVideoURL = destination
+                backgroundStyle = .video
+            }
+            showToast("Background updated", "Your video now loops behind Cadence.", icon: "film.fill", tint: Theme.accent)
+        } catch {
+            showToast("Couldn't use that video", error.localizedDescription, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+        }
+    }
+
+    func removeBackgroundVideo() {
+        if let url = backgroundVideoURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        withAnimation(.easeInOut(duration: 0.35)) {
+            backgroundVideoURL = nil
+            if backgroundStyle == .video { backgroundStyle = .animated }
+        }
+    }
+
+    private static func storedBackgroundVideo(in folder: URL) -> URL? {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        return files
+            .filter { $0.lastPathComponent.hasPrefix("background-video-") }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            .first
     }
 
     private static func resizedBackgroundImage(_ image: NSImage, maximumDimension: CGFloat) -> NSImage {

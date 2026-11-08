@@ -5,6 +5,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     case focus
     case tasks
     case music
+    case history
 
     var id: String { rawValue }
 
@@ -13,6 +14,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .focus: return "Focus"
         case .tasks: return "Tasks"
         case .music: return "Music"
+        case .history: return "History"
         }
     }
 
@@ -21,6 +23,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .focus: return "timer"
         case .tasks: return "checklist"
         case .music: return "play.rectangle.fill"
+        case .history: return "chart.bar.fill"
         }
     }
 }
@@ -37,6 +40,10 @@ enum AppThemeMode: String, CaseIterable, Identifiable {
 }
 
 enum AnimatedBackground: String, CaseIterable, Identifiable {
+    case rainyForest
+    case rainyCafe
+    case cityRain
+    case snowyForest
     case aurora
     case embers
     case tide
@@ -48,6 +55,10 @@ enum AnimatedBackground: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .rainyForest: return "Rainy forest"
+        case .rainyCafe: return "Rainy café"
+        case .cityRain: return "City rain"
+        case .snowyForest: return "Snowfall"
         case .aurora: return "Aurora"
         case .embers: return "Embers"
         case .tide: return "Tide"
@@ -59,6 +70,10 @@ enum AnimatedBackground: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
+        case .rainyForest: return "Pines, fog and steady rain"
+        case .rainyCafe: return "Street lights through a wet window"
+        case .cityRain: return "A night skyline in the rain"
+        case .snowyForest: return "Quiet snow over the pines"
         case .aurora: return "Slow drifting light"
         case .embers: return "Warm rising sparks"
         case .tide: return "Layered evening waves"
@@ -70,12 +85,24 @@ enum AnimatedBackground: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .rainyForest: return "cloud.rain.fill"
+        case .rainyCafe: return "cup.and.saucer.fill"
+        case .cityRain: return "building.2.fill"
+        case .snowyForest: return "snowflake"
         case .aurora: return "sparkles"
         case .embers: return "flame.fill"
         case .tide: return "water.waves"
         case .orbit: return "circle.dashed"
         case .bokeh: return "circle.grid.cross"
         case .silk: return "wind"
+        }
+    }
+
+    /// Realistic weather scenes, as opposed to the abstract color fields.
+    var isAmbient: Bool {
+        switch self {
+        case .rainyForest, .rainyCafe, .cityRain, .snowyForest: return true
+        default: return false
         }
     }
 }
@@ -115,6 +142,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 enum AppBackgroundStyle: String, CaseIterable, Identifiable {
     case animated
     case image
+    case video
 
     var id: String { rawValue }
 
@@ -122,6 +150,7 @@ enum AppBackgroundStyle: String, CaseIterable, Identifiable {
         switch self {
         case .animated: return "Animated"
         case .image: return "Your image"
+        case .video: return "Your video"
         }
     }
 
@@ -129,6 +158,7 @@ enum AppBackgroundStyle: String, CaseIterable, Identifiable {
         switch self {
         case .animated: return "A living scene from the gallery"
         case .image: return "A photo from your Mac"
+        case .video: return "A looping video from your Mac"
         }
     }
 
@@ -136,12 +166,14 @@ enum AppBackgroundStyle: String, CaseIterable, Identifiable {
         switch self {
         case .animated: return "sparkles"
         case .image: return "photo.fill"
+        case .video: return "film.fill"
         }
     }
 }
 
 enum AppSettingsSection: String, CaseIterable, Identifiable {
     case general
+    case automation
     case appearance
 
     var id: String { rawValue }
@@ -149,6 +181,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return "General"
+        case .automation: return "Automation"
         case .appearance: return "Appearance"
         }
     }
@@ -156,6 +189,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .general: return "slider.horizontal.3"
+        case .automation: return "wand.and.stars"
         case .appearance: return "paintpalette.fill"
         }
     }
@@ -272,6 +306,22 @@ struct TimerState: Codable {
 
     var isFreshInterval: Bool {
         remainingMs == totalMs
+    }
+
+    /// Length of the current interval in minutes (may be a one-off override).
+    var intervalMinutes: Int {
+        Int((Double(totalMs) / 60_000).rounded())
+    }
+
+    /// True when the current interval uses a one-off length instead of the configured one.
+    var hasCustomLength: Bool {
+        intervalMinutes != config.minutes(for: phase)
+    }
+
+    /// Step for adjusting an interval: 5 minutes, or 1 below 10 minutes.
+    static func lengthStep(from minutes: Int, up: Bool) -> Int {
+        let step = (up ? minutes : minutes - 1) < 10 ? 1 : 5
+        return min(180, max(1, minutes + (up ? step : -step)))
     }
 
     var formattedRemaining: String {
@@ -407,6 +457,20 @@ struct DayPlan: Codable, Equatable {
         startAtMs: 0,
         endAtMs: 0
     )
+}
+
+/// A completed focus block, logged by the Rust core (`tasks::FocusSession`).
+struct FocusSession: Codable, Identifiable, Equatable {
+    let id: String
+    let taskId: String?
+    let taskTitle: String?
+    let quadrant: TaskQuadrant?
+    let intention: String?
+    let minutes: Int
+    let completedAtMs: Int
+    let day: String
+
+    var completedAt: Date { Date(timeIntervalSince1970: Double(completedAtMs) / 1000) }
 }
 
 struct ToastMessage: Identifiable, Equatable {

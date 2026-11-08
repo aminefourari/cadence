@@ -262,6 +262,16 @@ struct AppBackground: View {
         ZStack {
             if model.backgroundStyle == .image, let image = model.backgroundImage {
                 imageBackground(image)
+            } else if model.backgroundStyle == .video, let url = model.backgroundVideoURL {
+                LoopingVideoView(url: url)
+                    .overlay { Theme.imageVeil }
+                    .overlay {
+                        LinearGradient(
+                            colors: [Theme.inkDeep.opacity(0.3), .clear, Theme.inkDeep.opacity(0.6)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    }
             } else {
                 AnimatedBackgroundView(scene: model.animatedBackground)
             }
@@ -321,12 +331,22 @@ struct AnimatedBackgroundView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: compact ? 1.0 / 10.0 : 1.0 / 20.0, paused: reduceMotion)) { timeline in
+        // Weather scenes need a smoother frame rate for falling rain.
+        let fps: Double = compact ? 12 : (scene.isAmbient ? 30 : 20)
+        TimelineView(.animation(minimumInterval: 1.0 / fps, paused: reduceMotion)) { timeline in
             let time = timeline.date.timeIntervalSinceReferenceDate
             ZStack {
                 SceneBase()
 
                 switch scene {
+                case .rainyForest:
+                    ForestScene(time: time, compact: compact, weather: .rain)
+                case .rainyCafe:
+                    CafeRainScene(time: time, compact: compact)
+                case .cityRain:
+                    CityRainScene(time: time, compact: compact)
+                case .snowyForest:
+                    ForestScene(time: time, compact: compact, weather: .snow)
                 case .aurora:
                     AuroraScene(time: time, compact: compact)
                 case .embers:

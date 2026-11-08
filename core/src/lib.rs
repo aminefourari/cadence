@@ -47,9 +47,13 @@ impl AppCore {
             .filter(|path| !path.is_empty())
             .map(PathBuf::from);
 
+        let now = now_ms(request);
         if let Some(path) = &path {
-            if let Some(persisted) = storage::load(path) {
+            if let Some(persisted) = storage::load(path, now) {
                 self.engine = PomodoroEngine::new(persisted.config);
+                if let Some(snapshot) = persisted.timer {
+                    self.engine.restore(snapshot);
+                }
                 self.stats = persisted.stats;
                 self.tasks = persisted.tasks;
                 self.sessions = persisted.sessions;
@@ -67,7 +71,6 @@ impl AppCore {
         self.storage_path = path;
         self.stats.for_day(&day);
         self.save();
-        let now = now_ms(request);
         Ok(timer::to_value(self.engine.state(now, &self.stats)))
     }
 
@@ -103,21 +106,25 @@ impl AppCore {
                     .and_then(Value::as_str)
                     .map(str::to_string);
                 self.engine.start_with_intention(now, intention);
+                self.save();
                 Ok(timer::to_value(self.engine.state(now, &self.stats)))
             }
             "timer.resume" => {
                 self.tick_once(now);
                 self.engine.start(now);
+                self.save();
                 Ok(timer::to_value(self.engine.state(now, &self.stats)))
             }
             "timer.pause" => {
                 self.tick_once(now);
                 self.engine.pause(now);
+                self.save();
                 Ok(timer::to_value(self.engine.state(now, &self.stats)))
             }
             "timer.toggle" => {
                 self.tick_once(now);
                 self.engine.toggle(now);
+                self.save();
                 Ok(timer::to_value(self.engine.state(now, &self.stats)))
             }
             "timer.reset" => {
@@ -143,6 +150,16 @@ impl AppCore {
                             .map_err(|_| CoreFailure::new("bad_request", "Unknown timer phase."))
                     })?;
                 self.engine.select_phase(phase);
+                self.save();
+                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+            }
+            "timer.setLength" => {
+                let minutes = request
+                    .get("minutes")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| CoreFailure::new("bad_request", "Minutes are required."))?;
+                self.tick_once(now);
+                self.engine.set_length(minutes.min(180) as u32);
                 self.save();
                 Ok(timer::to_value(self.engine.state(now, &self.stats)))
             }
@@ -184,6 +201,7 @@ impl AppCore {
                 Ok(timer::to_value(self.engine.state(now, &self.stats)))
             }
             "tasks.list" => Ok(json!(ordered_tasks(&self.tasks))),
+            "sessions.list" => Ok(json!(self.sessions)),
             "tasks.add" => self.task_add(&request, now),
             "tasks.update" => self.task_update(&request),
             "tasks.toggle" => self.task_toggle(&request, now),
@@ -216,7 +234,11 @@ impl AppCore {
         active_task_id: Option<String>,
         intention: Option<String>,
     ) {
-        let minutes = self.engine.config().focus_minutes;
+        let minutes = self
+            .engine
+            .last_transition()
+            .map(|transition| transition.focus_minutes_added)
+            .unwrap_or(self.engine.config().focus_minutes);
         let mut task_title = None;
         let mut quadrant = None;
         if let Some(task_id) = active_task_id.clone() {
@@ -386,6 +408,7 @@ impl AppCore {
             tasks: self.tasks.clone(),
             sessions: self.sessions.clone(),
             active_task_id: self.engine.active_task_id().cloned(),
+            timer: Some(self.engine.snapshot()),
         };
         if let Err(error) = storage::save(path, &payload) {
             eprintln!("[cadence-core] {error}");
@@ -509,6 +532,51 @@ mod tests {
         let parsed: Value = serde_json::from_str(&process_request(raw)).unwrap();
         assert_eq!(parsed["ok"], true);
         assert_eq!(parsed["data"]["phase"], "focus");
+    }
+
+    /// Swift decodes these keys (App/Sources/Models.swift `TimerState`, `FocusSession`).
+    /// If this fails, update the Swift models in the same change.
+    #[test]
+    fn json_contract_matches_swift_models() {
+        let mut core = AppCore::new();
+        let state = core
+            .handle(json!({"cmd": "tick", "nowMs": 1_000, "day": "2026-10-26"}))
+            .unwrap();
+        let mut keys: Vec<&str> = state.as_object().unwrap().keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "activeTaskId", "completedInCycle", "config", "cycleLength", "endsAtMs",
+                "intention", "phase", "remainingMs", "running", "todayFocusMinutes",
+                "todaySessions", "totalMs", "totalSessions", "transition",
+            ]
+        );
+        let mut config: Vec<&str> =
+            state["config"].as_object().unwrap().keys().map(String::as_str).collect();
+        config.sort_unstable();
+        assert_eq!(
+            config,
+            [
+                "autoStartNext", "focusMinutes", "longBreakMinutes",
+                "sessionsBeforeLongBreak", "shortBreakMinutes",
+            ]
+        );
+
+        core.sessions.push(FocusSession::default());
+        let sessions = core
+            .handle(json!({"cmd": "sessions.list", "nowMs": 1_000, "day": "2026-10-26"}))
+            .unwrap();
+        let mut session: Vec<&str> =
+            sessions[0].as_object().unwrap().keys().map(String::as_str).collect();
+        session.sort_unstable();
+        assert_eq!(
+            session,
+            [
+                "completedAtMs", "day", "id", "intention", "minutes", "quadrant", "taskId",
+                "taskTitle",
+            ]
+        );
     }
 
     #[test]

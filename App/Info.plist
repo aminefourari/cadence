@@ -26,6 +26,8 @@
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>CadenceUpdateRepository</key>
+	<string>aminefourari/cadence</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Cadence reads the YouTube video already playing in Brave so it can continue that exact video inside the app.</string>
 	<key>NSHighResolutionCapable</key>

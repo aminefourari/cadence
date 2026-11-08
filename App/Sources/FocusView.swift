@@ -198,13 +198,39 @@ struct TimerDial: View {
                 Circle()
                     .fill(Theme.mutedDim.opacity(0.7))
                     .frame(width: 2.5, height: 2.5)
-                Text("\(timer.config.minutes(for: timer.phase)) min interval")
+                if canAdjustLength {
+                    lengthButton(icon: "minus", up: false)
+                }
+                Text(timer.hasCustomLength ? "\(timer.intervalMinutes) min · this one only" : "\(timer.intervalMinutes) min interval")
                     .font(Theme.font(10.5, .medium))
-                    .foregroundStyle(Theme.mutedDim)
+                    .foregroundStyle(timer.hasCustomLength ? color.opacity(0.9) : Theme.mutedDim)
+                if canAdjustLength {
+                    lengthButton(icon: "plus", up: true)
+                }
             }
         }
         .frame(width: 250)
         .offset(y: -1)
+    }
+
+    /// The length can change only before an interval starts.
+    private var canAdjustLength: Bool {
+        !timer.running && timer.isFreshInterval
+    }
+
+    private func lengthButton(icon: String, up: Bool) -> some View {
+        Button {
+            model.setIntervalLength(TimerState.lengthStep(from: timer.intervalMinutes, up: up))
+        } label: {
+            Image(systemName: icon)
+                .font(Theme.font(8, .bold))
+                .foregroundStyle(Theme.muted)
+                .frame(width: 18, height: 18)
+                .background { Circle().fill(Theme.controlFill) }
+                .overlay { Circle().strokeBorder(Theme.controlStroke, lineWidth: 1) }
+        }
+        .buttonStyle(.plain)
+        .help(up ? "Make this interval longer" : "Make this interval shorter")
     }
 
     private var stateCaption: String {

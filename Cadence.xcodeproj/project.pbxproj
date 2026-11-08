@@ -13,15 +13,19 @@
 		0B996C87B49ED88E6C64F4FC /* MusicView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67C27EA81F8F43F8C9E5AE77 /* MusicView.swift */; };
 		1752F19C0E2F952586DD62B2 /* CoreClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4379BE91168428775C7BCE /* CoreClient.swift */; };
 		18D6E2F16EC875DB38E84763 /* ShutdownRitualView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE85E18C6DC7C9DA8A0205E3 /* ShutdownRitualView.swift */; };
+		2CEF3BBDA5E5E9076D9A5DD3 /* Updater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1555CAF3601F2878988BA326 /* Updater.swift */; };
 		2EEDA0F7F576C2471D2C3266 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45669D384F729B974A289D76 /* AppModel.swift */; };
 		42F812B5628C4737F6F2ABC6 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15160FDC4EFA23FB7BDABBD /* RootView.swift */; };
 		4985E9F46982010C95B3C4F5 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE41CC70363F0052C6AE9D26 /* DesignSystem.swift */; };
 		52653A3EF28CDB63EA03349D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DDB6F89AF92DAA058A40F2A6 /* Assets.xcassets */; };
 		5B3574FB61EF185B84EA3E9E /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691D0DA285C7BB1AF85FB6FF /* SidebarView.swift */; };
+		5EE448D43231E694CF7C7245 /* FocusGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43E7E1CE608AC20E5AA7E0E /* FocusGuard.swift */; };
 		6066F24DB054CD0884680821 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C2DF62647FB2EE7E4991B89 /* Models.swift */; };
 		669C5DFDFD6066B91B988960 /* MenuBarWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 305F2985E43494E4C7E45169 /* MenuBarWidgetView.swift */; };
+		6BDEC0B49550046B880DF590 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E280A68A4DC074E5CA8343BC /* HistoryView.swift */; };
 		84BABE3353A33DE47C0AF5D7 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121B89E4EFE23929C2C93971 /* NotificationManager.swift */; };
 		C0C71E00CDDCF3CE5EFDE6A6 /* BraveImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F8CB72D39D16FC8D58ACD7 /* BraveImporter.swift */; };
+		C6A5BE9FC8C08949CE472DF0 /* AmbientScenes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7887A658ECADDE86EBD21DE0 /* AmbientScenes.swift */; };
 		CFFD38AB2C2E4DA807379320 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C54F892D42E5EC2FBAAC05D /* TasksView.swift */; };
 		E34E2CC2E269DAFBC4645A1B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96A5EF390551823810448BA6 /* SettingsView.swift */; };
 		E6C21F4DE08B83B79EB0DFFE /* CadenceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E888B08581711A9E56B581 /* CadenceApp.swift */; };
@@ -31,6 +35,7 @@
 		0B25491FFD0EE9EF9C7B51DA /* YouTubePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubePlayer.swift; sourceTree = "<group>"; };
 		0B4379BE91168428775C7BCE /* CoreClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreClient.swift; sourceTree = "<group>"; };
 		121B89E4EFE23929C2C93971 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		1555CAF3601F2878988BA326 /* Updater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Updater.swift; sourceTree = "<group>"; };
 		1C54F892D42E5EC2FBAAC05D /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
 		2747B5C0BD75EFECA1D2569B /* Cadence.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cadence.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		305F2985E43494E4C7E45169 /* MenuBarWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarWidgetView.swift; sourceTree = "<group>"; };
@@ -40,11 +45,14 @@
 		67C27EA81F8F43F8C9E5AE77 /* MusicView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicView.swift; sourceTree = "<group>"; };
 		691D0DA285C7BB1AF85FB6FF /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		6A84BB1FBBDC223D415EAE12 /* IntentionCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentionCheckInView.swift; sourceTree = "<group>"; };
+		7887A658ECADDE86EBD21DE0 /* AmbientScenes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientScenes.swift; sourceTree = "<group>"; };
 		7ED8E97E528EA74AE8BC695E /* FocusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusView.swift; sourceTree = "<group>"; };
 		96A5EF390551823810448BA6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A15160FDC4EFA23FB7BDABBD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		D43E7E1CE608AC20E5AA7E0E /* FocusGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusGuard.swift; sourceTree = "<group>"; };
 		DDB6F89AF92DAA058A40F2A6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DE85E18C6DC7C9DA8A0205E3 /* ShutdownRitualView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShutdownRitualView.swift; sourceTree = "<group>"; };
+		E280A68A4DC074E5CA8343BC /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		E4F8CB72D39D16FC8D58ACD7 /* BraveImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BraveImporter.swift; sourceTree = "<group>"; };
 		EE41CC70363F0052C6AE9D26 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -61,12 +69,15 @@
 		73A4273111A8D8FD80C60BA7 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				7887A658ECADDE86EBD21DE0 /* AmbientScenes.swift */,
 				45669D384F729B974A289D76 /* AppModel.swift */,
 				E4F8CB72D39D16FC8D58ACD7 /* BraveImporter.swift */,
 				30E888B08581711A9E56B581 /* CadenceApp.swift */,
 				0B4379BE91168428775C7BCE /* CoreClient.swift */,
 				EE41CC70363F0052C6AE9D26 /* DesignSystem.swift */,
+				D43E7E1CE608AC20E5AA7E0E /* FocusGuard.swift */,
 				7ED8E97E528EA74AE8BC695E /* FocusView.swift */,
+				E280A68A4DC074E5CA8343BC /* HistoryView.swift */,
 				6A84BB1FBBDC223D415EAE12 /* IntentionCheckInView.swift */,
 				305F2985E43494E4C7E45169 /* MenuBarWidgetView.swift */,
 				5C2DF62647FB2EE7E4991B89 /* Models.swift */,
@@ -77,6 +88,7 @@
 				DE85E18C6DC7C9DA8A0205E3 /* ShutdownRitualView.swift */,
 				691D0DA285C7BB1AF85FB6FF /* SidebarView.swift */,
 				1C54F892D42E5EC2FBAAC05D /* TasksView.swift */,
+				1555CAF3601F2878988BA326 /* Updater.swift */,
 				0B25491FFD0EE9EF9C7B51DA /* YouTubePlayer.swift */,
 			);
 			path = Sources;
@@ -201,12 +213,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C6A5BE9FC8C08949CE472DF0 /* AmbientScenes.swift in Sources */,
 				2EEDA0F7F576C2471D2C3266 /* AppModel.swift in Sources */,
 				C0C71E00CDDCF3CE5EFDE6A6 /* BraveImporter.swift in Sources */,
 				E6C21F4DE08B83B79EB0DFFE /* CadenceApp.swift in Sources */,
 				1752F19C0E2F952586DD62B2 /* CoreClient.swift in Sources */,
 				4985E9F46982010C95B3C4F5 /* DesignSystem.swift in Sources */,
+				5EE448D43231E694CF7C7245 /* FocusGuard.swift in Sources */,
 				061256A4E51C8885ECEAE6C5 /* FocusView.swift in Sources */,
+				6BDEC0B49550046B880DF590 /* HistoryView.swift in Sources */,
 				047CF97BA092A20AD9B34E3D /* IntentionCheckInView.swift in Sources */,
 				669C5DFDFD6066B91B988960 /* MenuBarWidgetView.swift in Sources */,
 				6066F24DB054CD0884680821 /* Models.swift in Sources */,
@@ -217,6 +232,7 @@
 				18D6E2F16EC875DB38E84763 /* ShutdownRitualView.swift in Sources */,
 				5B3574FB61EF185B84EA3E9E /* SidebarView.swift in Sources */,
 				CFFD38AB2C2E4DA807379320 /* TasksView.swift in Sources */,
+				2CEF3BBDA5E5E9076D9A5DD3 /* Updater.swift in Sources */,
 				09A9C1FCECD82F37977B920D /* YouTubePlayer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -8,16 +8,19 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 - `make release` — Release build into `dist/Cadence.app`; `make zip` packages it
 - `make test` — Rust unit tests (`core/`, uses `.cargo-home`)
 - `cd core && CARGO_HOME=../.cargo-home cargo test --offline` — same, without make
+- `scripts/release.sh <version> [notes.md]` — bump version, test, build zip, tag, push, publish GitHub release (the in-app updater in `Updater.swift` reads releases from `CadenceUpdateRepository` in `App/Info.plist`)
 - `make project` — regenerate `Cadence.xcodeproj` from `project.yml` (needs xcodegen; checked-in project is used otherwise)
-- No Swift tests, no linter, no CI.
+- No Swift tests, no linter, no CI. `json_contract_matches_swift_models` (lib.rs) guards the JSON shape Swift decodes.
+- After adding/removing Swift files run `make project` (xcodegen) so the Xcode project picks them up.
 
 ## Layout
 
-- `core/src/lib.rs` — C ABI (`cadence_core_invoke/free/abi_version`) + command router (`timer.*`, `tasks.*`, `plan.build`)
+- `core/src/lib.rs` — C ABI (`cadence_core_invoke/free/abi_version`) + command router (`timer.*`, `tasks.*`, `sessions.list`, `plan.build`)
 - `core/src/timer.rs` — Pomodoro state machine; `tasks.rs` — tasks, Eisenhower quadrants, day planner; `storage.rs` — JSON persistence (`~/Library/Application Support/Cadence/core-state.json`)
 - `App/Sources/CoreClient.swift` — Swift wrapper for the ABI; `AppModel.swift` — main `ObservableObject`, 4 Hz heartbeat ticks the core
 - `App/Sources/YouTubePlayer.swift` — embedded WKWebView YouTube player; `BraveImporter.swift` — pulls the current video from Brave via osascript
-- Views: `FocusView`, `TasksView`, `MusicView`, `SettingsView`, `ShutdownRitualView`, `IntentionCheckInView`, `MenuBarWidgetView`, `SidebarView`; shared styling in `DesignSystem.swift`
+- `AppModel.focusActivityChanged` — single hook for focus start/stop side effects (music follows timer, `FocusGuard.swift`, Shortcuts)
+- Views: `FocusView`, `TasksView`, `MusicView`, `HistoryView`, `SettingsView`, `ShutdownRitualView`, `IntentionCheckInView`, `MenuBarWidgetView`, `SidebarView`; shared styling in `DesignSystem.swift`
 
 ## Conventions
 
@@ -26,4 +29,3 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 - Every core mutation calls `self.save()`.
 - Errors surface in the UI via `AppModel.showToast(..., tint: Theme.amber)`.
 - Debug launch args: `--demo-data`, `--tab=`, `--theme=`, `--show-settings`, `--video=` etc. (see `AppModel.init`).
-- `README.md` is partly outdated (still describes Brave remote-control, no Tasks tab).

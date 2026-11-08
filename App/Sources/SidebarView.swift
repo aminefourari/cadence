@@ -44,7 +44,7 @@ struct SidebarView: View {
                 .padding(.top, Theme.s(8))
 
             HStack {
-                Text("v1.1")
+                Text("v\(Updater.shared.currentVersion)")
                 Spacer()
                 Text("Swift × Rust")
             }
@@ -138,6 +138,7 @@ struct SidebarView: View {
         case .focus: return model.timer.running
         case .tasks: return false
         case .music: return player.isPlaying
+        case .history: return false
         }
     }
 

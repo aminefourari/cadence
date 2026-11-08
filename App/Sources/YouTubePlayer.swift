@@ -232,7 +232,7 @@ final class YouTubePlayerController: NSObject, ObservableObject {
         volume = clamped
         if clamped > 0 { isMuted = false }
         webViewStorage?.evaluateJavaScript(
-            "const p=document.getElementById('movie_player'); if(p){p.setVolume(\(Int(clamped))); p.unMute();}"
+            "(() => { const p=document.getElementById('movie_player'); if(p){p.setVolume(\(Int(clamped))); p.unMute();} })()"
         )
     }
 
@@ -376,7 +376,7 @@ final class YouTubePlayerController: NSObject, ObservableObject {
         if needsVolumeApply {
             needsVolumeApply = false
             webViewStorage?.evaluateJavaScript(
-                "const p=document.getElementById('movie_player'); if(p){p.setVolume(\(Int(volume))); p.unMute();}"
+                "(() => { const p=document.getElementById('movie_player'); if(p){p.setVolume(\(Int(volume))); p.unMute();} })()"
             )
         }
         if let pendingSeek, pendingSeek > 0 {

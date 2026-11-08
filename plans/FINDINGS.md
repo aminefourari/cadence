@@ -29,3 +29,7 @@ Considered and rejected:
 4. **Plan → calendar.** Export the generated day plan (`plan.build`) as an `.ics` file or write it to Calendar through EventKit, so the time-boxed day shows up next to meetings. You could also go the other way and read busy blocks so the planner works around meetings. Effort M (export) / L (two-way).
 
 Recommended order: 5 (git) → 1, 3 (quick bugs) → 2 (session restore) → 4 → direction #1.
+
+## Status (2026-11-08)
+
+Fixes 1–8 and features 1–3 are implemented and not yet committed (baseline commit `94ecff5`). Feature 4 (calendar) was not started.

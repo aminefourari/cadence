@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
+    @ObservedObject private var updater = Updater.shared
     @Environment(\.dismiss) private var dismiss
     @State private var draft = PomodoroConfig.defaults
     @State private var loaded = false
@@ -28,10 +29,10 @@ struct SettingsView: View {
                     .padding(.top, Theme.s(13))
 
                 Group {
-                    if section == .general {
-                        generalContent
-                    } else {
-                        appearanceContent
+                    switch section {
+                    case .general: generalContent
+                    case .automation: automationContent
+                    case .appearance: appearanceContent
                     }
                 }
                 .padding(.top, Theme.s(16))
@@ -97,11 +98,183 @@ struct SettingsView: View {
     }
 
     private var generalContent: some View {
-        VStack(alignment: .leading, spacing: Theme.s(14)) {
-            intervalsSection
-            flowSection
-            notificationsSection
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: Theme.s(14)) {
+                intervalsSection
+                flowSection
+                notificationsSection
+                updatesSection
+            }
+            .padding(.bottom, Theme.s(4))
         }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private var updatesSection: some View {
+        SettingsSection(title: "Updates") {
+            HStack(spacing: Theme.s(12)) {
+                ZStack {
+                    Circle()
+                        .fill(Theme.sky.opacity(0.1))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(Theme.font(11, .semibold))
+                        .foregroundStyle(Theme.sky.opacity(0.9))
+                }
+                VStack(alignment: .leading, spacing: Theme.s(2)) {
+                    Text("Cadence \(updater.currentVersion)")
+                        .font(Theme.font(12, .medium))
+                        .foregroundStyle(Theme.cream.opacity(0.9))
+                    Text(updateStatus)
+                        .font(Theme.font(10, .medium))
+                        .foregroundStyle(updateStatusIsError ? Theme.amber : Theme.mutedDim)
+                        .lineLimit(2)
+                }
+                Spacer()
+                switch updater.state {
+                case .checking, .installing:
+                    ProgressView().controlSize(.small)
+                case .available(let release):
+                    SmallSettingsButton(title: "Release notes") { NSWorkspace.shared.open(release.pageURL) }
+                    SmallSettingsButton(title: "Install \(release.version)") {
+                        Task { await updater.install(release) }
+                    }
+                default:
+                    SmallSettingsButton(title: "Check now") {
+                        Task { await updater.check() }
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.s(14))
+            .frame(height: 58)
+            .panel(cornerRadius: Theme.radius(18))
+        }
+    }
+
+    private var updateStatus: String {
+        switch updater.state {
+        case .idle: return "Checks GitHub for new releases once a day."
+        case .checking: return "Checking for updates…"
+        case .upToDate: return "You're on the latest version."
+        case .available(let release): return "Version \(release.version) is ready to install. Cadence restarts to finish."
+        case .installing: return "Downloading and installing… Cadence will restart."
+        case .failed(let message): return message
+        }
+    }
+
+    private var updateStatusIsError: Bool {
+        if case .failed = updater.state { return true }
+        return false
+    }
+
+    private var automationContent: some View {
+        VStack(alignment: .leading, spacing: Theme.s(14)) {
+            SettingsSection(title: "Music") {
+                toggleRow(
+                    icon: "music.note",
+                    tint: Theme.sky,
+                    title: "Music follows the timer",
+                    caption: "Pause YouTube when focus stops, resume when it starts again.",
+                    isOn: $model.musicFollowsTimer
+                )
+                .panel(cornerRadius: Theme.radius(18))
+            }
+
+            SettingsSection(title: "Focus guard") {
+                VStack(spacing: 0) {
+                    toggleRow(
+                        icon: "shield.lefthalf.filled",
+                        tint: Theme.accent,
+                        title: "Nudge me when I drift",
+                        caption: "A notification if one of these apps comes forward during focus.",
+                        isOn: $model.focusGuardEnabled
+                    )
+                    SettingsDivider()
+                    textRow(
+                        title: "Distracting apps",
+                        prompt: AppModel.defaultDistractingApps,
+                        text: $model.distractingApps
+                    )
+                    .opacity(model.focusGuardEnabled ? 1 : 0.5)
+                    .disabled(!model.focusGuardEnabled)
+                }
+                .panel(cornerRadius: Theme.radius(18))
+            }
+
+            SettingsSection(title: "Shortcuts") {
+                VStack(alignment: .leading, spacing: 0) {
+                    textRow(title: "When focus starts", prompt: "e.g. Focus On", text: $model.focusStartShortcut)
+                    SettingsDivider()
+                    textRow(title: "When focus stops", prompt: "e.g. Focus Off", text: $model.focusEndShortcut)
+                }
+                .panel(cornerRadius: Theme.radius(18))
+
+                Text("Name a shortcut from the Shortcuts app, for example one that uses “Set Focus” to turn Do Not Disturb on and off.")
+                    .font(Theme.font(9.5, .medium))
+                    .foregroundStyle(Theme.mutedDim)
+                    .padding(.leading, Theme.s(2))
+            }
+        }
+    }
+
+    private func toggleRow(
+        icon: String,
+        tint: Color,
+        title: String,
+        caption: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: Theme.s(12)) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.1))
+                    .frame(width: 30, height: 30)
+                Image(systemName: icon)
+                    .font(Theme.font(11, .semibold))
+                    .foregroundStyle(tint.opacity(0.9))
+            }
+            VStack(alignment: .leading, spacing: Theme.s(2)) {
+                Text(title)
+                    .font(Theme.font(12, .medium))
+                    .foregroundStyle(Theme.cream.opacity(0.9))
+                Text(caption)
+                    .font(Theme.font(10, .medium))
+                    .foregroundStyle(Theme.mutedDim)
+            }
+            Spacer()
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(Theme.accent)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, Theme.s(14))
+        .frame(height: 62)
+    }
+
+    private func textRow(title: String, prompt: String, text: Binding<String>) -> some View {
+        HStack(spacing: Theme.s(12)) {
+            Text(title)
+                .font(Theme.font(11, .medium))
+                .foregroundStyle(Theme.cream.opacity(0.85))
+                .frame(width: 130, alignment: .leading)
+            TextField(prompt, text: text)
+                .textFieldStyle(.plain)
+                .font(Theme.font(11, .medium))
+                .foregroundStyle(Theme.cream)
+                .padding(.horizontal, Theme.s(10))
+                .frame(height: 28)
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.radius(8), style: .continuous)
+                        .fill(Theme.controlFill)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.radius(8), style: .continuous)
+                        .strokeBorder(Theme.controlStroke, lineWidth: 1)
+                }
+        }
+        .padding(.horizontal, Theme.s(14))
+        .frame(height: 48)
     }
 
     private var appearanceContent: some View {
@@ -111,6 +284,7 @@ struct SettingsView: View {
                 appearanceModesSection
                 animatedScenesSection
                 backgroundImageSection
+                backgroundVideoSection
             }
             .padding(.bottom, Theme.s(4))
         }
@@ -191,14 +365,22 @@ struct SettingsView: View {
     }
 
     private var animatedScenesSection: some View {
-        SettingsSection(title: "Animated scenes") {
+        VStack(alignment: .leading, spacing: Theme.s(12)) {
+            sceneGrid(title: "Ambient scenes", scenes: AnimatedBackground.allCases.filter(\.isAmbient), columns: 2, height: 64)
+            sceneGrid(title: "Abstract", scenes: AnimatedBackground.allCases.filter { !$0.isAmbient }, columns: 3, height: 48)
+        }
+    }
+
+    private func sceneGrid(title: String, scenes: [AnimatedBackground], columns: Int, height: CGFloat) -> some View {
+        SettingsSection(title: title) {
             LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: Theme.s(8)), count: 3),
+                columns: Array(repeating: GridItem(.flexible(), spacing: Theme.s(8)), count: columns),
                 spacing: Theme.s(8)
             ) {
-                ForEach(AnimatedBackground.allCases) { scene in
+                ForEach(scenes) { scene in
                     AnimatedSceneTile(
                         scene: scene,
+                        previewHeight: height,
                         selected: model.backgroundStyle == .animated && model.animatedBackground == scene
                     ) {
                         model.setBackgroundScene(scene)
@@ -264,6 +446,34 @@ struct SettingsView: View {
                 .frame(height: 42)
                 .panel(cornerRadius: Theme.radius(14))
             }
+        }
+    }
+
+    private var backgroundVideoSection: some View {
+        SettingsSection(title: "Your video") {
+            HStack(spacing: Theme.s(8)) {
+                Image(systemName: "film")
+                    .font(Theme.font(10, .medium))
+                    .foregroundStyle(Theme.mutedDim)
+                Text(model.backgroundVideoURL == nil
+                     ? "Loop any video behind Cadence, muted. Try a rainy café or forest clip."
+                     : (model.backgroundStyle == .video ? "Your video is playing" : "Stored locally in Cadence"))
+                    .font(Theme.font(9.5, .medium))
+                    .foregroundStyle(model.backgroundStyle == .video ? Theme.accent : Theme.mutedDim)
+                Spacer(minLength: 4)
+                if model.backgroundVideoURL != nil {
+                    if model.backgroundStyle != .video {
+                        SmallSettingsButton(title: "Use video") { model.setBackgroundStyle(.video) }
+                    }
+                    SmallSettingsButton(title: "Replace") { model.chooseBackgroundVideo() }
+                    SmallSettingsButton(title: "Remove", destructive: true) { model.removeBackgroundVideo() }
+                } else {
+                    SmallSettingsButton(title: "Choose…") { model.chooseBackgroundVideo() }
+                }
+            }
+            .padding(.horizontal, Theme.s(10))
+            .frame(height: 42)
+            .panel(cornerRadius: Theme.radius(14))
         }
     }
 
@@ -464,7 +674,7 @@ struct SettingsView: View {
                 }
             } else {
                 HStack(spacing: Theme.s(12)) {
-                    Text("Appearance changes apply immediately.")
+                    Text("These changes apply immediately.")
                         .font(Theme.font(9.5, .medium))
                         .foregroundStyle(Theme.mutedDim)
 
@@ -592,6 +802,7 @@ private struct AppearanceChoiceCard: View {
 
 private struct AnimatedSceneTile: View {
     let scene: AnimatedBackground
+    var previewHeight: CGFloat = 48
     let selected: Bool
     let action: () -> Void
 
@@ -599,7 +810,7 @@ private struct AnimatedSceneTile: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: Theme.s(6)) {
                 AnimatedBackgroundView(scene: scene, compact: true)
-                    .frame(height: 48)
+                    .frame(height: previewHeight)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.radius(9), style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: Theme.radius(9), style: .continuous)

@@ -28,6 +28,11 @@ struct RootView: View {
                         .allowsHitTesting(model.selectedTab == .tasks)
                         .accessibilityHidden(model.selectedTab != .tasks)
 
+                    HistoryView()
+                        .opacity(model.selectedTab == .history ? 1 : 0)
+                        .allowsHitTesting(model.selectedTab == .history)
+                        .accessibilityHidden(model.selectedTab != .history)
+
                     if visitedMusic {
                         MusicView()
                             .opacity(model.selectedTab == .music ? 1 : 0)

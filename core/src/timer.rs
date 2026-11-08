@@ -82,6 +82,20 @@ pub struct TimerState {
     pub transition: Option<TimerTransition>,
 }
 
+/// The live part of the engine that must survive an app relaunch.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineSnapshot {
+    pub phase: Phase,
+    pub running: bool,
+    pub remaining_ms: u64,
+    pub ends_at_ms: Option<u64>,
+    pub completed_in_cycle: u32,
+    pub intention: Option<String>,
+    #[serde(default)]
+    pub length_override_ms: Option<u64>,
+}
+
 pub fn to_value(state: TimerState) -> Value {
     serde_json::to_value(state).expect("timer state serializes")
 }
@@ -97,6 +111,8 @@ pub struct PomodoroEngine {
     last_transition: Option<TimerTransition>,
     active_task_id: Option<String>,
     intention: Option<String>,
+    /// One-off length for the current interval; cleared when the interval ends.
+    length_override_ms: Option<u64>,
 }
 
 impl PomodoroEngine {
@@ -114,11 +130,63 @@ impl PomodoroEngine {
             last_transition: None,
             active_task_id: None,
             intention: None,
+            length_override_ms: None,
         }
+    }
+
+    /// Length of the current interval: the one-off override, or the configured phase length.
+    fn total_ms(&self) -> u64 {
+        self.length_override_ms
+            .unwrap_or_else(|| self.phase.duration_ms(&self.config))
+    }
+
+    /// Sets a one-off length for the current interval (e.g. 20 min instead of 25).
+    /// Only while the timer is stopped; the interval restarts at the new length.
+    /// The next interval uses the configured length again.
+    pub fn set_length(&mut self, minutes: u32) {
+        if self.running {
+            return;
+        }
+        let length_ms = minutes.clamp(1, 180) as u64 * 60_000;
+        self.length_override_ms =
+            (length_ms != self.phase.duration_ms(&self.config)).then_some(length_ms);
+        self.remaining_ms = length_ms;
+        self.ends_at_ms = None;
+    }
+
+    pub fn last_transition(&self) -> Option<&TimerTransition> {
+        self.last_transition.as_ref()
     }
 
     pub fn config(&self) -> &PomodoroConfig {
         &self.config
+    }
+
+    pub fn snapshot(&self) -> EngineSnapshot {
+        EngineSnapshot {
+            phase: self.phase,
+            running: self.running,
+            remaining_ms: self.remaining_ms,
+            ends_at_ms: self.ends_at_ms,
+            completed_in_cycle: self.completed_in_cycle,
+            intention: self.intention.clone(),
+            length_override_ms: self.length_override_ms,
+        }
+    }
+
+    /// Restores a saved snapshot. A running interval whose end passed while the
+    /// app was closed completes on the next `tick`.
+    pub fn restore(&mut self, snapshot: EngineSnapshot) {
+        self.phase = snapshot.phase;
+        self.length_override_ms = snapshot.length_override_ms.map(|ms| ms.clamp(60_000, 180 * 60_000));
+        let total = self.total_ms();
+        self.remaining_ms = snapshot.remaining_ms.min(total);
+        self.completed_in_cycle = snapshot
+            .completed_in_cycle
+            .min(self.config.sessions_before_long_break.saturating_sub(1));
+        self.intention = snapshot.intention;
+        self.ends_at_ms = snapshot.ends_at_ms.filter(|_| snapshot.running);
+        self.running = self.ends_at_ms.is_some();
     }
 
     pub fn start(&mut self, now_ms: u64) {
@@ -129,7 +197,7 @@ impl PomodoroEngine {
         if self.running {
             return;
         }
-        let is_fresh = self.remaining_ms == self.phase.duration_ms(&self.config);
+        let is_fresh = self.remaining_ms == self.total_ms();
         if self.phase == Phase::Focus && is_fresh {
             self.intention = intention.and_then(|value| {
                 let trimmed = value.trim();
@@ -139,7 +207,7 @@ impl PomodoroEngine {
             self.intention = None;
         }
         if self.remaining_ms == 0 {
-            self.remaining_ms = self.phase.duration_ms(&self.config);
+            self.remaining_ms = self.total_ms();
         }
         self.running = true;
         self.ends_at_ms = Some(now_ms.saturating_add(self.remaining_ms));
@@ -177,6 +245,7 @@ impl PomodoroEngine {
     pub fn reset(&mut self) {
         self.running = false;
         self.ends_at_ms = None;
+        self.length_override_ms = None;
         self.remaining_ms = self.phase.duration_ms(&self.config);
         self.intention = None;
     }
@@ -185,6 +254,7 @@ impl PomodoroEngine {
         self.phase = phase;
         self.running = false;
         self.ends_at_ms = None;
+        self.length_override_ms = None;
         self.remaining_ms = phase.duration_ms(&self.config);
         self.intention = None;
     }
@@ -196,6 +266,7 @@ impl PomodoroEngine {
             .min(self.config.sessions_before_long_break.saturating_sub(1));
         self.running = false;
         self.ends_at_ms = None;
+        self.length_override_ms = None;
         self.remaining_ms = self.phase.duration_ms(&self.config);
         self.intention = None;
     }
@@ -219,7 +290,7 @@ impl PomodoroEngine {
     }
 
     pub fn state(&self, now_ms: u64, stats: &crate::storage::Stats) -> TimerState {
-        let total_ms = self.phase.duration_ms(&self.config);
+        let total_ms = self.total_ms();
         let remaining_ms = if self.running {
             self.remaining_at(now_ms)
         } else {
@@ -259,8 +330,9 @@ impl PomodoroEngine {
                 Phase::ShortBreak | Phase::LongBreak => Phase::Focus,
             }
         } else if completed_phase == Phase::Focus {
-            stats.record_focus(self.config.focus_minutes);
-            focus_minutes_added = self.config.focus_minutes;
+            let minutes = ((self.total_ms() + 30_000) / 60_000) as u32;
+            stats.record_focus(minutes);
+            focus_minutes_added = minutes;
             self.completed_in_cycle = self.completed_in_cycle.saturating_add(1);
             if self.completed_in_cycle >= self.config.sessions_before_long_break {
                 self.completed_in_cycle = 0;
@@ -284,6 +356,7 @@ impl PomodoroEngine {
         });
 
         self.phase = next_phase;
+        self.length_override_ms = None;
         self.remaining_ms = next_phase.duration_ms(&self.config);
         self.running = auto_started;
         self.ends_at_ms = if auto_started {
@@ -367,6 +440,44 @@ mod tests {
         assert_eq!(stats.today_sessions, 0);
         assert_eq!(engine.state(10, &stats).phase, Phase::ShortBreak);
         assert!(engine.state(10, &stats).transition.unwrap().skipped);
+    }
+
+    #[test]
+    fn snapshot_restores_a_running_interval() {
+        let mut engine = PomodoroEngine::new(PomodoroConfig::default());
+        let mut stats = stats();
+        engine.start_with_intention(0, Some("Ship it".into()));
+        let snapshot = engine.snapshot();
+
+        let mut restored = PomodoroEngine::new(PomodoroConfig::default());
+        restored.restore(snapshot);
+        let state = restored.state(60_000, &stats);
+        assert!(state.running);
+        assert_eq!(state.remaining_ms, 24 * 60_000);
+        assert_eq!(state.intention.as_deref(), Some("Ship it"));
+        // The interval ended while the app was closed: next tick completes it.
+        assert!(restored.tick(30 * 60_000, &mut stats));
+        assert_eq!(stats.today_sessions, 1);
+    }
+
+    #[test]
+    fn one_off_length_applies_once_and_credits_actual_minutes() {
+        let mut engine = PomodoroEngine::new(PomodoroConfig::default());
+        let mut stats = stats();
+        engine.set_length(20);
+        let state = engine.state(0, &stats);
+        assert_eq!(state.total_ms, 20 * 60_000);
+        assert_eq!(state.remaining_ms, 20 * 60_000);
+
+        engine.start(0);
+        engine.set_length(5); // ignored while running
+        assert!(engine.tick(20 * 60_000, &mut stats));
+        assert_eq!(stats.today_focus_minutes, 20);
+        assert_eq!(engine.last_transition().unwrap().focus_minutes_added, 20);
+
+        // Break, then the next focus is back to the configured 25 minutes.
+        engine.skip(20 * 60_000, &mut stats);
+        assert_eq!(engine.state(0, &stats).total_ms, 25 * 60_000);
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::tasks::{FocusSession, Task};
-use crate::timer::PomodoroConfig;
+use crate::timer::{EngineSnapshot, PomodoroConfig};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase", default)]
@@ -40,11 +40,25 @@ pub struct Persisted {
     pub tasks: Vec<Task>,
     pub sessions: Vec<FocusSession>,
     pub active_task_id: Option<String>,
+    pub timer: Option<EngineSnapshot>,
 }
 
-pub fn load(path: &Path) -> Option<Persisted> {
+/// Loads saved state. A file that exists but cannot be parsed is moved aside
+/// (`core-state.corrupt-<ms>.json`) so the next save cannot overwrite it.
+pub fn load(path: &Path, now_ms: u64) -> Option<Persisted> {
     let data = fs::read_to_string(path).ok()?;
-    serde_json::from_str::<Persisted>(&data).ok()
+    match serde_json::from_str::<Persisted>(&data) {
+        Ok(persisted) => Some(persisted),
+        Err(error) => {
+            let backup = path.with_extension(format!("corrupt-{now_ms}.json"));
+            eprintln!(
+                "[cadence-core] unreadable state ({error}); moved to {}",
+                backup.display()
+            );
+            let _ = fs::rename(path, &backup);
+            None
+        }
+    }
 }
 
 pub fn save(path: &Path, payload: &Persisted) -> Result<(), String> {
@@ -59,4 +73,23 @@ pub fn save(path: &Path, payload: &Persisted) -> Result<(), String> {
     fs::write(&temporary, json).map_err(|e| format!("Could not write saved state: {e}"))?;
     fs::rename(&temporary, path).map_err(|e| format!("Could not replace saved state: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn corrupt_state_is_moved_aside_not_overwritten() {
+        let dir = std::env::temp_dir().join(format!("cadence-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("core-state.json");
+        fs::write(&path, "{ not json").unwrap();
+
+        assert!(load(&path, 42).is_none());
+        assert!(!path.exists());
+        let backup = dir.join("core-state.corrupt-42.json");
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "{ not json");
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }

@@ -50,6 +50,30 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    private static let phaseEndID = "cadence.phase-end"
+
+    /// Schedules the end-of-interval banner with the system, so it fires on time
+    /// even when App Nap throttles the in-app heartbeat or the app has quit.
+    func schedulePhaseEnd(at date: Date, title: String, body: String) {
+        let interval = date.timeIntervalSinceNow
+        guard interval > 1 else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: Self.phaseEndID,
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    func cancelPhaseEnd() {
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: [Self.phaseEndID])
+    }
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,

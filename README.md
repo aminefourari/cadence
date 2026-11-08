@@ -2,21 +2,36 @@
 
 <p align="left"><img src="docs/icon-preview.png" width="86" alt="Cadence app icon" /></p>
 
-**A native macOS focus player.** A Pomodoro timer with a music tab that controls the YouTube video you already have playing in Brave.
+**A native macOS focus player.** A Pomodoro timer, an Eisenhower task board that plans your day into focus blocks, a focus history, and a built-in YouTube player that can pick up the video you were watching in Brave.
 
-Cadence is deliberately split down the middle: the interface is SwiftUI, while the timer state machine, persistence, and browser bridge are all Rust. The app talks to the Rust core over a tiny JSON-over-C ABI.
+Cadence is deliberately split down the middle: the interface is SwiftUI, while the timer state machine, tasks, day planner and persistence are Rust. The app talks to the Rust core over a tiny JSON-over-C ABI.
 
 ![Cadence focus screen](docs/screenshots/focus.jpg)
 
 ## What's inside
 
-- **Focus** — 25/5/15 Pomodoro intervals, a long break every four focus sessions, configurable durations, session rhythm, and daily focus stats.
-- **Music** — a now-playing view for the YouTube tab in Brave. Play/pause, skip, seek, change volume, search YouTube, or jump back into Brave.
-- **Native notifications** — a system banner plus a calm chime when an interval ends.
-- **Automatic Brave connection** — opening Music checks Brave immediately and retries in the background. Cadence also detects missing automation permission, a stopped Brave, or Brave's Apple Events JavaScript setting being off.
+- **Focus** — 25/5/15 Pomodoro intervals, a long break every four focus sessions, configurable durations, an intention check-in before each focus block, and today's stats. A running interval survives quitting and relaunching.
+- **Tasks** — an urgent/important matrix with block estimates, and a day plan that time-boxes your open tasks into focus blocks and breaks toward a daily target.
+- **History** — every completed focus block is logged with its task, quadrant and intention: last-14-days chart, weekly total, streak, best day, and a quadrant split.
+- **Music** — an embedded YouTube player (paste a link, or pull the video playing in Brave and continue it in Cadence). Optionally pauses when focus stops and resumes when it starts.
+- **Automation** — a focus guard that nudges you when a distracting app comes forward during focus, and Shortcuts that run when focus starts/stops (e.g. to toggle a macOS Focus mode).
+- **Notifications** — the interval-end banner is scheduled with macOS when an interval starts, so it arrives on time even if the app is throttled or quit.
+- **Menu bar widget** and an **end-of-day shutdown ritual**.
 - **Keyboard-first** — start, pause, reset, skip, and switch tabs without leaving the keyboard.
 
 ![Cadence music screen](docs/screenshots/music.jpg)
+
+## Install
+
+Download `Cadence-<version>.zip` from the [latest release](https://github.com/aminefourari/cadence/releases/latest), unzip it, and move `Cadence.app` to `/Applications`.
+
+The app is ad-hoc signed, not notarized, so the first launch is blocked by Gatekeeper. Open it once, then go to **System Settings → Privacy & Security** and choose **Open Anyway**. Alternatively, run `xattr -dr com.apple.quarantine /Applications/Cadence.app`.
+
+### Updates
+
+Cadence checks GitHub for a newer release once a day. When one exists, you'll see a notice. Install it from **Preferences → General → Updates** or **Cadence → Check for Updates…**. Cadence downloads the release, checks that it is a valid Cadence bundle of the expected version, replaces itself, and relaunches. The app needs write access to the folder it lives in (true for `/Applications` on most Macs).
+
+After an update, macOS may ask again for permission to control Brave. This happens because each ad-hoc signed build is treated as a new app.
 
 ## Requirements
 
@@ -41,29 +56,19 @@ make release
 open dist/Cadence.app
 ```
 
-## Connect YouTube in Brave
+## Music and Brave
 
-Cadence does not embed a second player and does not ask for a YouTube API key. It drives the YouTube tab that is already open in Brave through AppleScript and JavaScript.
+Paste any YouTube link or video ID into the Music tab and it plays inside Cadence. No API key needed.
 
-1. Open a YouTube video in Brave.
-2. In Brave's menu bar, go to **View → Developer → Allow JavaScript from Apple Events**.
-3. In Cadence, open **Music**. Cadence checks Brave automatically and connects to the YouTube tab.
-4. When macOS asks whether Cadence may control Brave Browser, choose **Allow**.
+To continue a video you are already watching in Brave, press **From Brave** (Cadence also tries this automatically the first time you open Music). Cadence reads the active YouTube tab's video, time and volume, pauses it in Brave, and resumes it in the app.
+
+One-time setup:
+
+1. In Brave's menu bar, enable **View → Developer → Allow JavaScript from Apple Events**.
+2. When macOS asks whether Cadence may control Brave Browser, choose **Allow**.
    If you miss the prompt, enable it later in **System Settings → Privacy & Security → Automation**.
 
-Cadence re-checks Brave automatically while the Music tab is open, including after you change permissions or the Brave setting. There is no need to press refresh. If multiple YouTube tabs exist, Cadence uses the active YouTube tab in the front window, or the first YouTube tab it finds.
-
-### What the music controls do
-
-| Control | Action |
-| --- | --- |
-| Play / pause | Toggles the HTML5 video in the YouTube tab |
-| Previous | YouTube previous button, or seeks to 0 when unavailable |
-| Next | YouTube next button |
-| Scrubber | Sets the video's currentTime |
-| Volume | Sets the video's volume and unmutes when volume is raised |
-| Search | Opens YouTube search results in Brave |
-| Show / Reveal | Brings Brave to the front |
+If several YouTube tabs are open, Cadence uses the active tab in the front window, or the first YouTube tab it finds.
 
 ## A closer look
 
@@ -77,12 +82,15 @@ Cadence re-checks Brave automatically while the Music tab is open, including aft
 | Shortcut | Action |
 | --- | --- |
 | `⌘ 1` | Focus tab |
-| `⌘ 2` | Music tab |
+| `⌘ 2` | Tasks tab |
+| `⌘ 3` | Music tab |
+| `⌘ 4` | History tab |
 | `⌘ ↩` | Start / pause the timer |
 | `⌘ R` | Reset the current interval |
 | `⌘ →` | Skip to the next interval |
+| `⌘ ⇧ E` | End the day |
+| `⌘ ⇧ T` | Toggle theme |
 | `⌘ ,` | Preferences |
-| `⌘ ⇧ R` | Refresh the Brave connection |
 
 ## Architecture
 
@@ -90,8 +98,8 @@ Cadence re-checks Brave automatically while the Music tab is open, including aft
 ┌──────────────────────────────────────────────┐
 │ SwiftUI                                      │
 │                                              │
-│  AppModel   FocusView   MusicView            │
-│  SettingsView   DesignSystem                 │
+│  AppModel   Focus / Tasks / Music / History  │
+│  YouTubePlayer (WKWebView)   BraveImporter   │
 │                  │                           │
 │           CoreClient (C ABI + JSON)          │
 └──────────────────┼───────────────────────────┘
@@ -100,12 +108,8 @@ Cadence re-checks Brave automatically while the Music tab is open, including aft
 │ Rust core — libcadence_core.a                │
 │                                              │
 │  timer.rs      Pomodoro state machine        │
-│  storage.rs    preferences + daily stats     │
-│  music.rs      AppleScript / YouTube bridge  │
-└──────────────────┬───────────────────────────┘
-                   │ osascript
-┌──────────────────▼───────────────────────────┐
-│ Brave Browser → active YouTube tab           │
+│  tasks.rs      tasks, quadrants, day planner │
+│  storage.rs    JSON persistence              │
 └──────────────────────────────────────────────┘
 ```
 
@@ -119,17 +123,16 @@ void  cadence_core_free(char *pointer);
 uint32_t cadence_core_abi_version(void);
 ```
 
-Requests and responses are JSON. Commands include `initialize`, `tick`, `timer.start`, `timer.toggle`, `timer.configure`, `music.probe`, `music.status`, `music.toggle`, `music.seek`, `music.setVolume`, and `music.openSearch`.
+Requests and responses are JSON. Commands: `initialize`, `tick`, `timer.start`, `timer.resume`, `timer.pause`, `timer.toggle`, `timer.reset`, `timer.skip`, `timer.select`, `timer.configure`, `timer.assignTask`, `tasks.list`, `tasks.add`, `tasks.update`, `tasks.toggle`, `tasks.delete`, `tasks.clearOpen`, `sessions.list`, and `plan.build`.
 
 The Rust core owns:
 
-- the interval state machine and transitions
-- auto-advancing after a completed interval
-- the four-session long-break cycle
-- daily/all-time stats and preferences
-- all Brave detection, AppleScript execution, and YouTube DOM interaction
+- the interval state machine and transitions, including restoring a running interval after relaunch
+- auto-advancing after a completed interval and the long-break cycle
+- tasks, the focus-session log, and the day planner
+- daily/all-time stats and persistence (`~/Library/Application Support/Cadence/core-state.json`; an unreadable file is moved aside to `core-state.corrupt-<ms>.json`, never overwritten)
 
-SwiftUI only renders state and sends intents.
+SwiftUI renders state, sends intents, and owns the YouTube player, Brave import, notifications and automation.
 
 ## Project layout
 
@@ -143,8 +146,8 @@ App/
 core/
   src/lib.rs           C ABI + command routing
   src/timer.rs         Pomodoro engine and unit tests
-  src/storage.rs       Preferences and stats persistence
-  src/music.rs         Brave/YouTube bridge
+  src/storage.rs       Persistence
+  src/tasks.rs         Tasks, focus sessions, day planner
   Cargo.toml
 scripts/
   generate_icon.py     Rebuilds the app icon asset catalog
@@ -155,13 +158,22 @@ Cadence.xcodeproj      Ready-to-open Xcode project
 
 ## Data
 
-Preferences and daily stats live at:
+Tasks, focus sessions, stats, interval settings and the running interval live at:
 
 ```text
 ~/Library/Application Support/Cadence/core-state.json
 ```
 
-The current version intentionally keeps in-flight intervals in memory; if you quit and relaunch, the timer starts paused at the beginning of the current interval while your stats and interval settings are preserved.
+A running interval is saved too: after a relaunch it continues where it was, or completes if it ended while Cadence was closed. Appearance and automation settings live in `UserDefaults`. Launch with `--demo-data` to use a separate `core-demo.json` instead.
+
+## Releasing
+
+```bash
+scripts/release.sh 1.2.0            # notes generated from commits
+scripts/release.sh 1.2.0 notes.md   # or your own notes
+```
+
+The script needs a clean working tree. It bumps the version in `project.yml`, runs the tests, builds `dist/Cadence-1.2.0.zip`, commits, tags `v1.2.0`, pushes, and publishes the GitHub release. Installed copies pick the release up through the in-app updater, which reads `CadenceUpdateRepository` in `App/Info.plist`.
 
 ## Tests
 
@@ -169,7 +181,7 @@ The current version intentionally keeps in-flight intervals in memory; if you qu
 make test
 ```
 
-This runs the Rust unit tests for the timer state machine, long-break cycle, pause semantics, skipped sessions, and the FFI command envelope.
+This runs the Rust unit tests for the timer state machine, long-break cycle, pause semantics, skipped sessions, session restore, corrupt-file recovery, the day planner, the FFI command envelope, and the JSON contract the Swift models decode.
 
 To rebuild the app icon (requires Python 3 + Pillow):
 
@@ -180,8 +192,7 @@ python3 scripts/generate_icon.py
 ## Notes and limitations
 
 - **Not sandboxed.** Apple Events automation and direct browser control require the non-sandboxed build used here. The app is ad-hoc signed for local use, not notarized. If you distribute it, sign and notarize it with your own Developer ID.
-- **One YouTube tab at a time.** Cadence controls the active YouTube tab (or the first YouTube tab it finds in Brave).
-- **DOM-dependent.** The music controls use YouTube's player button selectors. If YouTube changes its DOM, `core/src/music.rs` is the place to update.
+- **YouTube-dependent.** The player drives YouTube's embed player API and the Brave import reads the watch page; if YouTube changes either, `App/Sources/YouTubePlayer.swift` and `App/Sources/BraveImporter.swift` are the places to update.
 - **Brave's JavaScript toggle is required.** This is a Brave security setting and cannot be enabled by Cadence automatically.
 - The app is built for Apple Silicon. Add an `x86_64` Rust target (and update `ARCHS`) if you need Intel support.
 

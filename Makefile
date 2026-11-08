@@ -5,6 +5,7 @@ RELEASE_DERIVED := build-release
 APP := $(DERIVED)/Build/Products/Debug/Cadence.app
 RELEASE_APP := $(RELEASE_DERIVED)/Build/Products/Release/Cadence.app
 CARGO_HOME_DIR := $(CURDIR)/.cargo-home
+VERSION := $(shell sed -nE 's/.*MARKETING_VERSION: "([^"]*)".*/\1/p' project.yml)
 
 .PHONY: project build run release zip test clean icon
 
@@ -32,8 +33,8 @@ release: project
 	@echo "Built dist/Cadence.app"
 
 zip: release
-	ditto -c -k --norsrc --keepParent dist/Cadence.app dist/Cadence-1.0.zip
-	@echo "Built dist/Cadence-1.0.zip"
+	ditto -c -k --norsrc --keepParent dist/Cadence.app dist/Cadence-$(VERSION).zip
+	@echo "Built dist/Cadence-$(VERSION).zip"
 
 test:
 	@CARGO="$$(command -v cargo | head -1)"; \

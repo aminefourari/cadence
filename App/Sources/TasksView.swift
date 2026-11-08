@@ -52,7 +52,7 @@ struct TasksView: View {
                 taskToDelete = nil
             }
         } message: { task in
-            Text("“\(task.title)” and its focus history will be removed from Cadence.")
+            Text("“\(task.title)” will be removed. Its logged focus sessions stay in your history.")
         }
     }
 
@@ -683,8 +683,8 @@ private struct TaskEditorView: View {
                             .font(Theme.font(10.5, .semibold, design: .monospaced))
                             .foregroundStyle(Theme.cream)
                             .frame(width: 62)
-                        MiniStepperButton(icon: "plus", enabled: estimateBlocks < 12) {
-                            estimateBlocks = min(12, estimateBlocks + 1)
+                        MiniStepperButton(icon: "plus", enabled: estimateBlocks < 24) {
+                            estimateBlocks = min(24, estimateBlocks + 1)
                         }
                     }
                 }

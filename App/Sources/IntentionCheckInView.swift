@@ -6,6 +6,8 @@ struct IntentionCheckInView: View {
     @State private var intention = ""
     @State private var countdown = 5
     @State private var didBegin = false
+    @State private var minutes = 25
+    @State private var holding = false
     @FocusState private var fieldFocused: Bool
 
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -72,7 +74,7 @@ struct IntentionCheckInView: View {
                 }
 
                 VStack(alignment: .leading, spacing: Theme.s(8)) {
-                    Text("What single outcome defines success for this \(model.timer.config.focusMinutes)-minute block?")
+                    Text("What single outcome defines success for this \(minutes)-minute block?")
                         .font(Theme.font(11, .medium))
                         .foregroundStyle(Theme.muted)
                         .lineSpacing(2)
@@ -84,6 +86,7 @@ struct IntentionCheckInView: View {
                         .tint(Theme.accent)
                         .focused($fieldFocused)
                         .onSubmit(begin)
+                        .onChange(of: intention) { _, _ in holding = true }
                         .padding(.horizontal, Theme.s(13))
                         .frame(height: 44)
                         .background {
@@ -97,10 +100,13 @@ struct IntentionCheckInView: View {
                 }
                 .padding(.top, Theme.s(22))
 
+                lengthRow
+                    .padding(.top, Theme.s(16))
+
                 Spacer(minLength: 18)
 
                 HStack(spacing: Theme.s(10)) {
-                    Text("Starting automatically in \(countdown)s")
+                    Text(holding ? "Press Return to begin" : "Starting automatically in \(countdown)s")
                         .font(Theme.font(9.5, .medium))
                         .foregroundStyle(Theme.mutedDim)
                     Spacer()
@@ -111,7 +117,7 @@ struct IntentionCheckInView: View {
                 }
             }
             .padding(Theme.s(26))
-            .frame(width: 520, height: 410)
+            .frame(width: 520, height: 445)
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: Theme.radius(26), style: .continuous)
@@ -133,10 +139,11 @@ struct IntentionCheckInView: View {
             .scaleEffect(0.99)
         }
         .onAppear {
+            minutes = model.timer.intervalMinutes
             fieldFocused = true
         }
         .onReceive(ticker) { _ in
-            guard !didBegin, countdown > 0 else { return }
+            guard !didBegin, !holding, countdown > 0 else { return }
             if ProcessInfo.processInfo.arguments.contains("--hold-intention") { return }
             countdown -= 1
             if countdown == 0 { begin() }
@@ -146,9 +153,68 @@ struct IntentionCheckInView: View {
         }
     }
 
+    private var lengthRow: some View {
+        let standard = model.timer.config.focusMinutes
+        return HStack(spacing: Theme.s(10)) {
+            VStack(alignment: .leading, spacing: Theme.s(3)) {
+                Text("Length")
+                    .font(Theme.font(11, .semibold))
+                    .foregroundStyle(Theme.cream.opacity(0.9))
+                Text(minutes == standard
+                     ? "Your usual block"
+                     : "This block only · next ones are \(standard) min")
+                    .font(Theme.font(9.5, .medium))
+                    .foregroundStyle(minutes == standard ? Theme.mutedDim : Theme.accent.opacity(0.9))
+            }
+            Spacer()
+            ForEach(lengthPresets(standard: standard), id: \.self) { preset in
+                Button {
+                    holding = true
+                    minutes = preset
+                } label: {
+                    Text("\(preset)")
+                        .font(Theme.font(10.5, .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(minutes == preset ? Theme.onAccent : Theme.cream.opacity(0.8))
+                        .frame(width: 34, height: 28)
+                        .background {
+                            Capsule().fill(minutes == preset ? Theme.accent : Theme.controlFill)
+                        }
+                        .overlay {
+                            Capsule().strokeBorder(Theme.controlStroke, lineWidth: minutes == preset ? 0 : 1)
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+            Divider().frame(height: 18)
+            Button {
+                holding = true
+                minutes = TimerState.lengthStep(from: minutes, up: false)
+            } label: { Image(systemName: "minus") }
+                .buttonStyle(CircleControlStyle(size: 28))
+                .disabled(minutes <= 1)
+            Text("\(minutes) min")
+                .font(Theme.font(12, .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Theme.cream)
+                .frame(width: 54)
+            Button {
+                holding = true
+                minutes = TimerState.lengthStep(from: minutes, up: true)
+            } label: { Image(systemName: "plus") }
+                .buttonStyle(CircleControlStyle(size: 28))
+                .disabled(minutes >= 180)
+        }
+    }
+
+    /// Common shorter options plus the usual length, e.g. 10 · 15 · 20 · 25.
+    private func lengthPresets(standard: Int) -> [Int] {
+        Array(Set([10, 15, 20, standard].filter { $0 <= standard })).sorted()
+    }
+
     private func begin() {
         guard !didBegin else { return }
         didBegin = true
-        model.beginFocus(intention: intention)
+        model.beginFocus(intention: intention, minutes: minutes)
     }
 }
