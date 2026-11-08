@@ -275,19 +275,16 @@ private struct TickRing: View {
 
             for index in 0..<60 {
                 let isMajor = index % 5 == 0
-                let angle = (Double(index) / 60.0) * Double.pi * 2 - Double.pi / 2
-                let outer = base - 8
-                let inner = outer - (isMajor ? 9 : 4)
+                // Explicit CGFloat math: mixed Double/CGFloat here times out older type checkers.
+                let angle: CGFloat = CGFloat(index) / 60 * 2 * .pi - .pi / 2
+                let dx: CGFloat = cos(angle)
+                let dy: CGFloat = sin(angle)
+                let outer: CGFloat = base - 8
+                let inner: CGFloat = outer - (isMajor ? 9 : 4)
 
                 var path = Path()
-                path.move(to: CGPoint(
-                    x: center.x + cos(angle) * inner,
-                    y: center.y + sin(angle) * inner
-                ))
-                path.addLine(to: CGPoint(
-                    x: center.x + cos(angle) * outer,
-                    y: center.y + sin(angle) * outer
-                ))
+                path.move(to: CGPoint(x: center.x + dx * inner, y: center.y + dy * inner))
+                path.addLine(to: CGPoint(x: center.x + dx * outer, y: center.y + dy * outer))
                 context.stroke(
                     path,
                     with: .color(Theme.cream.opacity(isMajor ? 0.21 : 0.08)),
