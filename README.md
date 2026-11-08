@@ -10,12 +10,14 @@ Cadence is deliberately split down the middle: the interface is SwiftUI, while t
 
 ## What's inside
 
-- **Focus** — 25/5/15 Pomodoro intervals, a long break every four focus sessions, configurable durations, an intention check-in before each focus block, and today's stats. A running interval survives quitting and relaunching.
+- **Focus** — 25/5/15 Pomodoro intervals, a long break every four focus sessions, configurable durations, a one-off length for the next interval (e.g. a 20 min block, credited at its real length), an intention check-in before each focus block, and today's stats. A running interval survives quitting and relaunching.
 - **Tasks** — an urgent/important matrix with block estimates, and a day plan that time-boxes your open tasks into focus blocks and breaks toward a daily target.
 - **History** — every completed focus block is logged with its task, quadrant and intention: last-14-days chart, weekly total, streak, best day, and a quadrant split.
 - **Music** — an embedded YouTube player (paste a link, or pull the video playing in Brave and continue it in Cadence). Optionally pauses when focus stops and resumes when it starts.
 - **Automation** — a focus guard that nudges you when a distracting app comes forward during focus, and Shortcuts that run when focus starts/stops (e.g. to toggle a macOS Focus mode).
 - **Notifications** — the interval-end banner is scheduled with macOS when an interval starts, so it arrives on time even if the app is throttled or quit.
+- **Ambient backgrounds** — animated scenes (rainy forest, rainy café, city rain, snowfall), abstract backgrounds, or a video background.
+- **Preferences** — Timer, Automation, Appearance, Notifications and Updates panes; every change applies instantly, and changing interval lengths never interrupts the interval in progress.
 - **Menu bar widget** and an **end-of-day shutdown ritual**.
 - **Keyboard-first** — start, pause, reset, skip, and switch tabs without leaving the keyboard.
 
@@ -29,7 +31,7 @@ The app is ad-hoc signed, not notarized, so the first launch is blocked by Gatek
 
 ### Updates
 
-Cadence checks GitHub for a newer release once a day. When one exists, you'll see a notice. Install it from **Preferences → General → Updates** or **Cadence → Check for Updates…**. Cadence downloads the release, checks that it is a valid Cadence bundle of the expected version, replaces itself, and relaunches. The app needs write access to the folder it lives in (true for `/Applications` on most Macs).
+Cadence checks GitHub for a newer release once a day. When one exists, you'll see a notice. Install it from **Preferences → Updates** or **Cadence → Check for Updates…**. Cadence downloads the release, checks that it is a valid Cadence bundle of the expected version, replaces itself, and relaunches. The app needs write access to the folder it lives in (true for `/Applications` on most Macs).
 
 After an update, macOS may ask again for permission to control Brave. This happens because each ad-hoc signed build is treated as a new app.
 
@@ -54,6 +56,7 @@ To build a standalone Release app:
 ```bash
 make release
 open dist/Cadence.app
+make zip   # packages dist/Cadence-<version>.zip
 ```
 
 ## Music and Brave
@@ -73,7 +76,14 @@ If several YouTube tabs are open, Cadence uses the active tab in the front windo
 ## A closer look
 
 <p align="center">
+  <img src="docs/screenshots/tasks.jpg" width="48%" alt="Eisenhower task board and day plan" />
+  <img src="docs/screenshots/history.jpg" width="48%" alt="Focus history" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/intention.jpg" width="48%" alt="Intention check-in with a one-off length" />
   <img src="docs/screenshots/focus-running.jpg" width="48%" alt="A focus interval running" />
+</p>
+<p align="center">
   <img src="docs/screenshots/settings.jpg" width="48%" alt="Cadence preferences" />
 </p>
 
@@ -123,7 +133,7 @@ void  cadence_core_free(char *pointer);
 uint32_t cadence_core_abi_version(void);
 ```
 
-Requests and responses are JSON. Commands: `initialize`, `tick`, `timer.start`, `timer.resume`, `timer.pause`, `timer.toggle`, `timer.reset`, `timer.skip`, `timer.select`, `timer.configure`, `timer.assignTask`, `tasks.list`, `tasks.add`, `tasks.update`, `tasks.toggle`, `tasks.delete`, `tasks.clearOpen`, `sessions.list`, and `plan.build`.
+Requests and responses are JSON. Commands: `initialize`, `tick`, `timer.start`, `timer.resume`, `timer.pause`, `timer.toggle`, `timer.reset`, `timer.skip`, `timer.select`, `timer.configure`, `timer.setLength`, `timer.assignTask`, `tasks.list`, `tasks.add`, `tasks.update`, `tasks.toggle`, `tasks.delete`, `tasks.clearOpen`, `sessions.list`, and `plan.build`.
 
 The Rust core owns:
 
@@ -151,6 +161,8 @@ core/
   Cargo.toml
 scripts/
   generate_icon.py     Rebuilds the app icon asset catalog
+  release.sh           Bumps the version, tests, tags and pushes a release
+.github/workflows/     CI and tag-driven release builds
 docs/screenshots/      README screenshots
 project.yml            XcodeGen project definition
 Cadence.xcodeproj      Ready-to-open Xcode project
