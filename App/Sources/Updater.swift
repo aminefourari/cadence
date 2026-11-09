@@ -6,11 +6,9 @@ import Foundation
 /// Every installed copy checks `releases/latest` of the repository named by
 /// `CadenceUpdateRepository` in Info.plist at launch and every few hours. A newer
 /// release is downloaded and verified in the background (bundle id, version,
-/// codesign integrity), then installed automatically as soon as nothing would be
+/// Developer ID signature from team T7A3N2UXYN), then installed automatically as soon as nothing would be
 /// interrupted (`isIdle`), or when the app quits. Automatic install can be turned off;
 /// the update is then offered in Preferences → Updates.
-/// ponytail: trusts GitHub over HTTPS + bundle id + codesign integrity; add an EdDSA
-/// signature check (or Developer ID + notarization) if the release channel needs hardening.
 @MainActor
 final class Updater: ObservableObject {
     static let shared = Updater()
@@ -155,7 +153,12 @@ final class Updater: ObservableObject {
             guard newVersion == release.version else {
                 throw UpdateError("The download is version \(newVersion), expected \(release.version).")
             }
-            try await Self.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", newApp.path])
+            // Releases are Developer ID signed + notarized by the release workflow; refuse anything else.
+            try await Self.run("/usr/bin/codesign", [
+                "--verify", "--deep", "--strict",
+                "-R=anchor apple generic and certificate leaf[subject.OU] = \"T7A3N2UXYN\"",
+                newApp.path,
+            ])
 
             stagedApp = newApp
             state = .ready(release)

@@ -9,6 +9,7 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 - `make test` — Rust unit tests (`core/`, uses `.cargo-home`)
 - `cd core && CARGO_HOME=../.cargo-home cargo test --offline` — same, without make
 - `scripts/release.sh <version>` — bump version, test, commit, tag, push; `.github/workflows/release.yml` builds on macOS and publishes the GitHub release (the in-app updater in `Updater.swift` reads releases from `CadenceUpdateRepository` in `App/Info.plist`)
+- Releases are Developer ID signed (team `T7A3N2UXYN`) and notarized in `release.yml` from repo secrets `MACOS_CERTIFICATE_P12`/`_PASSWORD`, `NOTARY_API_KEY_P8`/`_ID`, `NOTARY_API_ISSUER_ID`; local `make` builds stay ad-hoc. `Updater.swift` only installs bundles signed by that team. Key material lives in `~/.cadence-signing/`.
 - CI: `.github/workflows/ci.yml` (Rust tests on Linux, Release build on macOS, artifact upload)
 - `make project` — regenerate `Cadence.xcodeproj` from `project.yml` (needs xcodegen; checked-in project is used otherwise)
 - No Swift tests, no linter. `json_contract_matches_swift_models` (lib.rs) guards the JSON shape Swift decodes.
