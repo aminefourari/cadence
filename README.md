@@ -2,7 +2,7 @@
 
 <p align="left"><img src="docs/icon-preview.png" width="86" alt="Cadence app icon" /></p>
 
-**A native macOS focus player.** A Pomodoro timer, an Eisenhower task board that plans your day into focus blocks, a focus history, and a built-in YouTube player that can pick up the video you were watching in Brave.
+**A native macOS focus player.** A Pomodoro timer, a Kanban task board, a day plan that time-boxes your tasks into focus blocks, a focus history, and a built-in YouTube player that can pick up the video you were watching in Brave.
 
 Cadence is deliberately split down the middle: the interface is SwiftUI, while the timer state machine, tasks, day planner and persistence are Rust. The app talks to the Rust core over a tiny JSON-over-C ABI.
 
@@ -11,14 +11,16 @@ Cadence is deliberately split down the middle: the interface is SwiftUI, while t
 ## What's inside
 
 - **Focus** — 25/5/15 Pomodoro intervals, a long break every four focus sessions, configurable durations, a one-off length for the next interval (e.g. a 20 min block, credited at its real length), an intention check-in before each focus block, and today's stats. A running interval survives quitting and relaunching.
-- **Tasks** — an urgent/important matrix with block estimates, and a day plan that time-boxes your open tasks into focus blocks and breaks toward a daily target.
-- **History** — every completed focus block is logged with its task, quadrant and intention: last-14-days chart, weekly total, streak, best day, and a quadrant split.
+- **Tasks** — a Trello-style Kanban board with To Do, In Progress and Done columns. Drag cards between and within columns. Each card has a priority (High, Medium or Low) and a block estimate. Sort the board manually, by priority or by date, archive cards (one at a time or a whole list), and start focusing on a card from its menu.
+- **Day plan** — on the Focus screen, a plan that time-boxes your open tasks into focus blocks and breaks toward a daily target, highest priority first.
+- **History** — every completed focus block is logged with its task, priority and intention: last-14-days chart, weekly total, streak, best day, and a split by priority.
 - **Music** — an embedded YouTube player (paste a link, or pull the video playing in Brave and continue it in Cadence). Optionally pauses when focus stops and resumes when it starts.
-- **Automation** — a focus guard that nudges you when a distracting app comes forward during focus, and Shortcuts that run when focus starts/stops (e.g. to toggle a macOS Focus mode).
+- **Automation** — a focus guard that nudges you when a distracting app comes forward during focus (pick the apps from a list of installed apps), and shortcuts from the Shortcuts app that run when focus starts or stops, for example one that uses *Set Focus* to turn Do Not Disturb on and off.
 - **Notifications** — the interval-end banner is scheduled with macOS when an interval starts, so it arrives on time even if the app is throttled or quit.
-- **Ambient backgrounds** — animated scenes (rainy forest, rainy café, city rain, snowfall), abstract backgrounds, or a video background.
+- **Themes** — Dynamic (crisp type, coral light), Cozy (serif warmth, slower rhythm) and Blossom (rose petals, rounded softness), each in light and dark.
+- **Backgrounds** — a photo that follows your theme, animated ambient scenes (rainy forest, rainy café, city rain, snowfall), abstract backgrounds, or a video background.
 - **Preferences** — Timer, Automation, Appearance, Notifications and Updates panes; every change applies instantly, and changing interval lengths never interrupts the interval in progress.
-- **Menu bar widget** and an **end-of-day shutdown ritual**.
+- **Menu bar widget** and an **end-of-day shutdown ritual**. On macOS 26 with Apple Intelligence, the ritual also writes a short recap of your day with the on-device model; nothing leaves your Mac.
 - **Keyboard-first** — start, pause, reset, skip, and switch tabs without leaving the keyboard.
 
 ![Cadence music screen](docs/screenshots/music.jpg)
@@ -27,15 +29,15 @@ Cadence is deliberately split down the middle: the interface is SwiftUI, while t
 
 Download `Cadence-<version>.zip` from the [latest release](https://github.com/aminefourari/cadence/releases/latest), unzip it, and move `Cadence.app` to `/Applications`.
 
-The app is ad-hoc signed, not notarized, so the first launch is blocked by Gatekeeper. Open it once, then go to **System Settings → Privacy & Security** and choose **Open Anyway**. Alternatively, run `xattr -dr com.apple.quarantine /Applications/Cadence.app`.
+Releases from 1.3.0 on are signed with a Developer ID and notarized by Apple, so the app opens without Gatekeeper warnings.
 
 ### Updates
 
-Every release reaches installed copies on its own. Cadence checks GitHub at launch and every 4 hours. A new release downloads in the background and is checked to be a valid Cadence bundle of the expected version. It then installs as soon as nothing would be interrupted: no focus interval running and no music playing. It also installs when you quit. Cadence relaunches on the new version and says so; a paused interval is restored.
+Every release reaches installed copies on its own. Cadence checks GitHub at launch and every 4 hours. A new release downloads in the background and is checked to be a Cadence bundle of the expected version, signed with Cadence's Developer ID. It then installs as soon as nothing would be interrupted: no focus interval running and no music playing. It also installs when you quit. Cadence relaunches on the new version and says so; a paused interval is restored.
 
 You can turn this off in **Preferences → Updates**, then install with **Restart & install**. The app needs write access to the folder it lives in (true for `/Applications` on most Macs).
 
-After an update, macOS may ask again for permission to control Brave. This happens because each ad-hoc signed build is treated as a new app.
+Because every release carries the same signature, macOS keeps the permissions you granted (such as controlling Brave) across updates. Updating from 1.2.0 or earlier asks once more, since those builds were ad-hoc signed.
 
 ## Requirements
 
@@ -78,7 +80,7 @@ If several YouTube tabs are open, Cadence uses the active tab in the front windo
 ## A closer look
 
 <p align="center">
-  <img src="docs/screenshots/tasks.jpg" width="48%" alt="Eisenhower task board and day plan" />
+  <img src="docs/screenshots/tasks.jpg" width="48%" alt="Kanban task board" />
   <img src="docs/screenshots/history.jpg" width="48%" alt="Focus history" />
 </p>
 <p align="center">
@@ -120,7 +122,7 @@ If several YouTube tabs are open, Cadence uses the active tab in the front windo
 │ Rust core — libcadence_core.a                │
 │                                              │
 │  timer.rs      Pomodoro state machine        │
-│  tasks.rs      tasks, quadrants, day planner │
+│  tasks.rs      tasks, priorities, day planner│
 │  storage.rs    JSON persistence              │
 └──────────────────────────────────────────────┘
 ```
@@ -135,7 +137,7 @@ void  cadence_core_free(char *pointer);
 uint32_t cadence_core_abi_version(void);
 ```
 
-Requests and responses are JSON. Commands: `initialize`, `tick`, `timer.start`, `timer.resume`, `timer.pause`, `timer.toggle`, `timer.reset`, `timer.skip`, `timer.select`, `timer.configure`, `timer.setLength`, `timer.assignTask`, `tasks.list`, `tasks.add`, `tasks.update`, `tasks.toggle`, `tasks.delete`, `tasks.clearOpen`, `sessions.list`, and `plan.build`.
+Requests and responses are JSON. Commands: `initialize`, `tick`, `timer.start`, `timer.resume`, `timer.pause`, `timer.toggle`, `timer.reset`, `timer.skip`, `timer.select`, `timer.configure`, `timer.setLength`, `timer.assignTask`, `tasks.list`, `tasks.add`, `tasks.update`, `tasks.reorder`, `tasks.toggle`, `tasks.delete`, `tasks.clearOpen`, `sessions.list`, and `plan.build`.
 
 The Rust core owns:
 
@@ -183,15 +185,18 @@ A running interval is saved too: after a relaunch it continues where it was, or 
 ## Releasing
 
 ```bash
-scripts/release.sh 1.2.0
+scripts/release.sh 1.4.0
 ```
 
-The script needs a clean working tree. It bumps the version in `project.yml`, runs the tests, commits, tags `v1.2.0`, and pushes. The tag starts the **Release** workflow, which:
+The script needs a clean working tree. It bumps the version in `project.yml`, runs the tests, commits, tags `v1.4.0`, and pushes. The tag starts the **Release** workflow, which:
 
 1. checks that the tag matches the app version
 2. runs the Rust tests
-3. builds the app on a macOS runner
-4. publishes the GitHub release with `Cadence-1.2.0.zip`
+3. builds the app on a macOS runner, signed with the Developer ID certificate and hardened runtime
+4. notarizes it with Apple and staples the ticket
+5. publishes the GitHub release with `Cadence-1.4.0.zip`
+
+Signing and notarization read these repository secrets: `MACOS_CERTIFICATE_P12` and `MACOS_CERTIFICATE_PASSWORD` (the Developer ID Application certificate as base64 .p12), and `NOTARY_API_KEY_P8`, `NOTARY_API_KEY_ID` and `NOTARY_API_ISSUER_ID` (an App Store Connect API key). Local `make` builds stay ad-hoc signed.
 
 Installed copies pick the release up through the in-app updater. To rebuild an existing tag, run the workflow manually from the Actions tab.
 
@@ -215,7 +220,7 @@ python3 scripts/generate_icon.py
 
 ## Notes and limitations
 
-- **Not sandboxed.** Apple Events automation and direct browser control require the non-sandboxed build used here. The app is ad-hoc signed for local use, not notarized. If you distribute it, sign and notarize it with your own Developer ID.
+- **Not sandboxed.** Apple Events automation and direct browser control require the non-sandboxed build used here. Local builds are ad-hoc signed; only release builds are signed and notarized. If you fork and distribute it, use your own Developer ID and change the team ID in `Updater.swift`.
 - **YouTube-dependent.** The player drives YouTube's embed player API and the Brave import reads the watch page; if YouTube changes either, `App/Sources/YouTubePlayer.swift` and `App/Sources/BraveImporter.swift` are the places to update.
 - **Brave's JavaScript toggle is required.** This is a Brave security setting and cannot be enabled by Cadence automatically.
 - The app is built for Apple Silicon. Add an `x86_64` Rust target (and update `ARCHS`) if you need Intel support.
