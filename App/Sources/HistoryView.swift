@@ -30,7 +30,7 @@ struct HistoryView: View {
             HStack(alignment: .top, spacing: Theme.s(16)) {
                 VStack(alignment: .leading, spacing: Theme.s(16)) {
                     chartPanel(stats)
-                    quadrantPanel(stats)
+                    priorityPanel(stats)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -117,15 +117,15 @@ struct HistoryView: View {
         .panel(cornerRadius: Theme.radius(18))
     }
 
-    private func quadrantPanel(_ stats: HistoryStats) -> some View {
+    private func priorityPanel(_ stats: HistoryStats) -> some View {
         VStack(alignment: .leading, spacing: Theme.s(10)) {
-            SectionLabel(text: "This week by quadrant")
+            SectionLabel(text: "This week by priority")
             if stats.weekMinutes == 0 {
                 Text("Finish a focus block with a task attached to see the split.")
                     .font(Theme.font(10, .medium))
                     .foregroundStyle(Theme.mutedDim)
             } else {
-                ForEach(stats.weekByQuadrant, id: \.label) { row in
+                ForEach(stats.weekByPriority, id: \.label) { row in
                     HStack(spacing: Theme.s(10)) {
                         Text(row.label)
                             .font(Theme.font(10, .medium))
@@ -178,7 +178,7 @@ struct HistoryView: View {
     private func sessionRow(_ session: FocusSession) -> some View {
         HStack(alignment: .top, spacing: Theme.s(9)) {
             Circle()
-                .fill(session.quadrant?.tint ?? Theme.mutedDim)
+                .fill(session.priority?.tint ?? Theme.mutedDim)
                 .frame(width: 6, height: 6)
                 .padding(.top, Theme.s(5))
             VStack(alignment: .leading, spacing: Theme.s(2)) {
@@ -213,7 +213,7 @@ struct HistoryStats {
         var id: Date { date }
     }
 
-    struct QuadrantRow {
+    struct PriorityRow {
         let label: String
         let tint: Color
         let minutes: Int
@@ -224,7 +224,7 @@ struct HistoryStats {
     let bestDayMinutes: Int
     let streak: Int
     let lastTwoWeeks: [Day]
-    let weekByQuadrant: [QuadrantRow]
+    let weekByPriority: [PriorityRow]
 
     init(sessions: [FocusSession], today: Date, formatter: DateFormatter) {
         let calendar = Calendar.current
@@ -258,17 +258,17 @@ struct HistoryStats {
         }
         self.streak = streak
 
-        var byQuadrant: [TaskQuadrant?: Int] = [:]
+        var byPriority: [TaskPriority?: Int] = [:]
         for session in sessions where weekKeys.contains(session.day) {
-            byQuadrant[session.quadrant, default: 0] += session.minutes
+            byPriority[session.priority, default: 0] += session.minutes
         }
-        var rows = TaskQuadrant.allCases.compactMap { quadrant -> QuadrantRow? in
-            guard let minutes = byQuadrant[quadrant], minutes > 0 else { return nil }
-            return QuadrantRow(label: quadrant.title, tint: quadrant.tint, minutes: minutes)
+        var rows = TaskPriority.allCases.compactMap { priority -> PriorityRow? in
+            guard let minutes = byPriority[priority], minutes > 0 else { return nil }
+            return PriorityRow(label: "\(priority.title) priority", tint: priority.tint, minutes: minutes)
         }
-        if let untagged = byQuadrant[nil], untagged > 0 {
-            rows.append(QuadrantRow(label: "No task", tint: Theme.mutedDim, minutes: untagged))
+        if let untagged = byPriority[nil], untagged > 0 {
+            rows.append(PriorityRow(label: "No task", tint: Theme.mutedDim, minutes: untagged))
         }
-        weekByQuadrant = rows
+        weekByPriority = rows
     }
 }

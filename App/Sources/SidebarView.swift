@@ -46,7 +46,7 @@ struct SidebarView: View {
             HStack {
                 Text("v\(Updater.shared.currentVersion)")
                 Spacer()
-                Text("Swift × Rust")
+                Text("Cadence 2026")
             }
             .font(Theme.font(9.5, .medium, design: .monospaced))
             .foregroundStyle(Theme.mutedDim.opacity(0.75))

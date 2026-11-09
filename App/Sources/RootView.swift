@@ -42,6 +42,8 @@ struct RootView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
+                // Pages swap instantly; a cross-fade leaves the old page lingering.
+                .animation(nil, value: model.selectedTab)
             }
             .ignoresSafeArea()
 

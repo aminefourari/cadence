@@ -2,6 +2,16 @@ import SwiftUI
 
 struct FocusView: View {
     @EnvironmentObject private var model: AppModel
+    @AppStorage("focusShowsPlan") private var showPlan = false
+
+    private var timerStack: some View {
+        VStack(spacing: Theme.s(9)) {
+            TimerDial(timer: model.timer)
+            CurrentTaskBar()
+            TimerControls(timer: model.timer)
+        }
+        .frame(maxWidth: .infinity)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -9,17 +19,27 @@ struct FocusView: View {
 
             Spacer(minLength: 16)
 
-            HStack(alignment: .center, spacing: Theme.s(24)) {
-                VStack(spacing: Theme.s(9)) {
-                    TimerDial(timer: model.timer)
-                    CurrentTaskBar()
-                    TimerControls(timer: model.timer)
+            // Three columns when the window is wide; otherwise Session and Day plan share one.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: Theme.s(24)) {
+                    PlanPanel()
+                        .frame(width: 236)
+                        .frame(maxHeight: .infinity)
+                    timerStack
+                    FocusPanel()
+                        .frame(width: 274)
+                        .frame(maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity)
 
-                FocusPanel()
+                HStack(alignment: .center, spacing: Theme.s(24)) {
+                    timerStack
+                    VStack(spacing: Theme.s(10)) {
+                        PanelSwitch(showPlan: $showPlan)
+                        if showPlan { PlanPanel() } else { FocusPanel() }
+                    }
                     .frame(width: 274)
                     .frame(maxHeight: .infinity)
+                }
             }
 
             Spacer(minLength: 12)
@@ -304,12 +324,12 @@ struct CurrentTaskBar: View {
     var body: some View {
         HStack(spacing: Theme.s(9)) {
             if let task = model.activeTask {
-                Image(systemName: task.quadrant.icon)
+                Image(systemName: task.priority.icon)
                     .font(Theme.font(11, .semibold))
-                    .foregroundStyle(task.quadrant.tint)
+                    .foregroundStyle(task.priority.tint)
                     .frame(width: 22, height: 22)
                     .background {
-                        Circle().fill(task.quadrant.tint.opacity(0.12))
+                        Circle().fill(task.priority.tint.opacity(0.12))
                     }
 
                 VStack(alignment: .leading, spacing: Theme.s(1)) {
@@ -348,10 +368,10 @@ struct CurrentTaskBar: View {
             } else {
                 Image(systemName: "hand.draw")
                     .font(Theme.font(11, .medium))
-                    .foregroundStyle(Theme.mutedDim)
+                    .foregroundStyle(Theme.muted)
                 Text("Drag a task here or pick one from the queue")
                     .font(Theme.font(10.5, .medium))
-                    .foregroundStyle(Theme.mutedDim)
+                    .foregroundStyle(Theme.muted)
                 Spacer()
             }
         }
@@ -360,12 +380,12 @@ struct CurrentTaskBar: View {
         .frame(maxWidth: 360)
         .background {
             RoundedRectangle(cornerRadius: Theme.radius(12), style: .continuous)
-                .fill(Theme.accent.opacity(targeted ? 0.09 : 0.025))
+                .fill(targeted ? Theme.accent.opacity(0.09) : Theme.controlFill)
         }
         .overlay {
             RoundedRectangle(cornerRadius: Theme.radius(12), style: .continuous)
                 .strokeBorder(
-                    targeted ? Theme.accent.opacity(0.6) : Theme.cream.opacity(0.06),
+                    targeted ? Theme.accent.opacity(0.6) : Theme.cream.opacity(0.16),
                     style: StrokeStyle(lineWidth: 1, dash: model.activeTask == nil ? [5, 5] : [])
                 )
         }
@@ -405,13 +425,7 @@ struct TimerControls: View {
                     .offset(x: timer.running ? 0 : 1.5)
             }
             .buttonStyle(CircleControlStyle(size: 64, accent: color, filled: true))
-            .shadow(color: color.opacity(0.35), radius: 18, x: 0, y: 8)
-            .overlay {
-                Circle()
-                    .strokeBorder(color.opacity(0.18), lineWidth: 5)
-                    .frame(width: 74, height: 74)
-                    .allowsHitTesting(false)
-            }
+            .shadow(color: Theme.shadow, radius: 8, x: 0, y: 4)
             .help(timer.running ? "Pause timer" : "Start timer")
 
             Button {
@@ -427,11 +441,219 @@ struct TimerControls: View {
                 ShortcutHint(text: "⌘↩")
                 Text(timer.running ? "to pause" : "to start")
                     .font(Theme.font(9.5, .medium))
-                    .foregroundStyle(Theme.mutedDim)
+                    .foregroundStyle(Theme.muted)
             }
-            .offset(y: 19)
+            .offset(y: 24)
         }
         .padding(.bottom, Theme.s(6))
+    }
+}
+
+private struct PlanPanel: View {
+    @EnvironmentObject private var model: AppModel
+
+    private var targetLabel: String {
+        let minutes = model.dailyTargetMinutes
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        if remainder == 0 { return "\(hours)h" }
+        return "\(hours)h \(remainder)m"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                SectionLabel(text: "Daily plan")
+                Spacer()
+                Text(targetLabel)
+                    .font(Theme.font(10, .semibold, design: .monospaced))
+                    .foregroundStyle(Theme.muted)
+            }
+
+            HStack(spacing: Theme.s(7)) {
+                Text("Target focus")
+                    .font(Theme.font(9.5, .medium))
+                    .foregroundStyle(Theme.mutedDim)
+                Spacer()
+                MiniStepperButton(icon: "minus", enabled: model.dailyTargetMinutes > 30) {
+                    model.adjustDailyTarget(byMinutes: -30)
+                }
+                MiniStepperButton(icon: "plus", enabled: model.dailyTargetMinutes < 720) {
+                    model.adjustDailyTarget(byMinutes: 30)
+                }
+            }
+            .padding(.top, Theme.s(7))
+
+            HStack(spacing: Theme.s(7)) {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.cream.opacity(0.06))
+                        Capsule()
+                            .fill(Theme.accent)
+                            .frame(width: geometry.size.width * min(1, Double(model.plan.focusMinutes) / Double(max(1, model.dailyTargetMinutes))))
+                    }
+                }
+                .frame(height: 4)
+                Text("\(model.plan.focusMinutes)m")
+                    .font(Theme.font(8.5, .medium, design: .monospaced))
+                    .foregroundStyle(Theme.mutedDim)
+                    .frame(width: 36, alignment: .trailing)
+            }
+            .padding(.top, Theme.s(8))
+
+            Rectangle()
+                .fill(Theme.hairline)
+                .frame(height: 1)
+                .padding(.vertical, Theme.s(12))
+
+            if model.plan.blocks.isEmpty {
+                VStack(spacing: Theme.s(7)) {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(Theme.font(22, .light))
+                        .foregroundStyle(Theme.mutedDim.opacity(0.5))
+                    Text("Add tasks to generate a time-boxed day.")
+                        .font(Theme.font(9.5, .medium))
+                        .foregroundStyle(Theme.mutedDim)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, Theme.s(12))
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(model.plan.blocks) { block in
+                            PlanBlockRow(block: block) {
+                                guard let id = block.taskId,
+                                      let task = model.tasks.first(where: { $0.id == id }) else { return }
+                                model.assignTask(task)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: .infinity)
+            }
+
+            Text("5 min buffers included · starts at \(planStartLabel)")
+                .font(Theme.font(8.5, .medium))
+                .foregroundStyle(Theme.mutedDim.opacity(0.75))
+                .lineLimit(1)
+                .padding(.top, Theme.s(8))
+        }
+        .padding(Theme.s(15))
+        .panel(cornerRadius: Theme.radius(22))
+    }
+
+    private var planStartLabel: String {
+        guard model.plan.startAtMs > 0 else { return "—" }
+        return Date(timeIntervalSince1970: Double(model.plan.startAtMs) / 1000)
+            .formatted(date: .omitted, time: .shortened)
+    }
+}
+
+private struct PlanBlockRow: View {
+    let block: PlanBlock
+    let onFocus: () -> Void
+
+    @State private var hovered = false
+
+    private var tint: Color {
+        if block.kind.isFocus { return block.priority?.tint ?? Theme.accent }
+        return block.kind == .longBreak ? Theme.sky : Theme.mint
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.s(7)) {
+            Text(block.startDate.formatted(date: .omitted, time: .shortened))
+                .font(Theme.font(8.5, .medium, design: .monospaced))
+                .foregroundStyle(Theme.mutedDim)
+                .frame(width: 36, alignment: .trailing)
+                .padding(.top, Theme.s(2))
+
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 6, height: 6)
+                    .padding(.top, Theme.s(4))
+                Rectangle()
+                    .fill(tint.opacity(0.18))
+                    .frame(width: 1)
+                    .frame(maxHeight: .infinity)
+            }
+            .frame(width: 10)
+
+            VStack(alignment: .leading, spacing: Theme.s(2)) {
+                Text(block.kind.isFocus ? (block.taskTitle ?? "Focus") : block.kind.title)
+                    .font(Theme.font(9.5, .medium))
+                    .foregroundStyle(block.kind.isFocus ? Theme.cream.opacity(0.85) : Theme.muted)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(block.kind.isFocus
+                     ? "\(block.priority.map { "\($0.title) priority" } ?? "Focus") · \(block.minutes)m"
+                     : "Recovery · \(block.minutes)m")
+                    .font(Theme.font(8, .medium))
+                    .foregroundStyle(Theme.mutedDim)
+            }
+
+            Spacer(minLength: 2)
+
+            if block.kind.isFocus {
+                Button(action: onFocus) {
+                    Image(systemName: "play.fill")
+                        .font(Theme.font(7.5, .bold))
+                        .foregroundStyle(hovered ? Theme.onAccent : Theme.mutedDim)
+                        .frame(width: 19, height: 19)
+                        .background { Circle().fill(hovered ? tint : Theme.cream.opacity(0.035)) }
+                }
+                .buttonStyle(.plain)
+                .padding(.top, Theme.s(1))
+            }
+        }
+        .padding(.vertical, Theme.s(5))
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+    }
+}
+
+/// Themed two-way switch between the Session and Day plan panels.
+private struct PanelSwitch: View {
+    @Binding var showPlan: Bool
+    @Namespace private var selection
+
+    var body: some View {
+        HStack(spacing: 0) {
+            segment("Session", icon: "timer", isPlan: false)
+            segment("Day plan", icon: "calendar", isPlan: true)
+        }
+        .padding(Theme.s(3))
+        .background { Capsule().fill(Theme.controlFill) }
+        .overlay { Capsule().strokeBorder(Theme.controlStroke, lineWidth: 1) }
+    }
+
+    private func segment(_ title: String, icon: String, isPlan: Bool) -> some View {
+        let selected = showPlan == isPlan
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { showPlan = isPlan }
+        } label: {
+            HStack(spacing: Theme.s(5)) {
+                Image(systemName: icon)
+                    .font(Theme.font(9.5, .semibold))
+                Text(title)
+                    .font(Theme.font(10.5, .semibold))
+            }
+            .foregroundStyle(selected ? Theme.onAccent : Theme.muted)
+            .frame(maxWidth: .infinity)
+            .frame(height: 28)
+            .background {
+                if selected {
+                    Capsule()
+                        .fill(Theme.accent)
+                        .matchedGeometryEffect(id: "selection", in: selection)
+                }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -445,8 +667,8 @@ struct FocusPanel: View {
         model.openTasks
             .filter { $0.id != model.timer.activeTaskId }
             .sorted { lhs, rhs in
-                if lhs.quadrant.sortOrder != rhs.quadrant.sortOrder {
-                    return lhs.quadrant.sortOrder < rhs.quadrant.sortOrder
+                if lhs.priority.sortOrder != rhs.priority.sortOrder {
+                    return lhs.priority.sortOrder < rhs.priority.sortOrder
                 }
                 return lhs.createdAtMs < rhs.createdAtMs
             }
@@ -626,9 +848,9 @@ private struct QueueTaskRow: View {
     var body: some View {
         HStack(spacing: Theme.s(8)) {
             Circle()
-                .fill(task.quadrant.tint)
+                .fill(task.priority.tint)
                 .frame(width: 5, height: 5)
-                .shadow(color: task.quadrant.tint.opacity(0.6), radius: 3)
+                .shadow(color: task.priority.tint.opacity(0.6), radius: 3)
 
             VStack(alignment: .leading, spacing: Theme.s(1)) {
                 Text(task.title)

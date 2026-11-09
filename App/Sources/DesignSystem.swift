@@ -104,6 +104,69 @@ struct ThemePalette {
         imageVeil: Color(hex: 0xF4EBDD).opacity(0.66)
     )
 
+    static let blossom = ThemePalette(
+        ink: Color(hex: 0x1E1219),
+        inkDeep: Color(hex: 0x150C12),
+        surface: Color(hex: 0x281821),
+        surfaceHigh: Color(hex: 0x35202C),
+        backgroundEnd: Color(hex: 0x25131D),
+        cream: Color(hex: 0xFBE9F0),
+        muted: Color(hex: 0xC9A3B5),
+        mutedDim: Color(hex: 0x8F6A7D),
+        accent: Color(hex: 0xF27BA8),
+        accentLight: Color(hex: 0xFFB3CF),
+        amber: Color(hex: 0xF2C38B),
+        mint: Color(hex: 0xA8D5C2),
+        sky: Color(hex: 0xBBA9EA),
+        danger: Color(hex: 0xE77A8A),
+        hairline: Color.white.opacity(0.08),
+        panelFill: Color(hex: 0x2A1822).opacity(0.88),
+        onAccent: Color(hex: 0x1E1018),
+        controlFill: Color.white.opacity(0.055),
+        controlFillHover: Color.white.opacity(0.1),
+        controlStroke: Color.white.opacity(0.08),
+        strongFill: Color.white.opacity(0.09),
+        shadow: Color.black.opacity(0.3),
+        imageVeil: Color(hex: 0x150C12).opacity(0.72)
+    )
+
+    static let blossomLight = ThemePalette(
+        ink: Color(hex: 0xFBEAF0),
+        inkDeep: Color(hex: 0xF5DDE7),
+        surface: Color(hex: 0xFDF2F6),
+        surfaceHigh: Color(hex: 0xFFF9FB),
+        backgroundEnd: Color(hex: 0xF2D4E1),
+        cream: Color(hex: 0x3A1B2B),
+        muted: Color(hex: 0x84576D),
+        mutedDim: Color(hex: 0xAD8498),
+        accent: Color(hex: 0xDB4F86),
+        accentLight: Color(hex: 0xB8336A),
+        amber: Color(hex: 0x9A6A2A),
+        mint: Color(hex: 0x3F7D66),
+        sky: Color(hex: 0x6D5BB5),
+        danger: Color(hex: 0xC0475C),
+        hairline: Color.black.opacity(0.07),
+        panelFill: Color(hex: 0xFFF7FA).opacity(0.9),
+        onAccent: Color(hex: 0xFFFFFF),
+        controlFill: Color.black.opacity(0.035),
+        controlFillHover: Color.black.opacity(0.065),
+        controlStroke: Color.black.opacity(0.08),
+        strongFill: Color.black.opacity(0.07),
+        shadow: Color(hex: 0x6B2347).opacity(0.12),
+        imageVeil: Color(hex: 0xFBEAF0).opacity(0.66)
+    )
+
+    static func resolve(_ mode: AppThemeMode, light: Bool) -> ThemePalette {
+        switch (mode, light) {
+        case (.dynamic, false): return .dynamic
+        case (.dynamic, true): return .dynamicLight
+        case (.cozy, false): return .cozy
+        case (.cozy, true): return .cozyLight
+        case (.blossom, false): return .blossom
+        case (.blossom, true): return .blossomLight
+        }
+    }
+
     static let cozyLight = ThemePalette(
         ink: Color(hex: 0xF3E7D2),
         inkDeep: Color(hex: 0xEBDCC4),
@@ -150,6 +213,21 @@ struct ThemeStyle {
         spacingScale: 1.12,
         radiusScale: 1.18
     )
+
+    static let blossom = ThemeStyle(
+        fontDesign: .rounded,
+        typeScale: 1.02,
+        spacingScale: 1.06,
+        radiusScale: 1.4
+    )
+
+    static func resolve(_ mode: AppThemeMode) -> ThemeStyle {
+        switch mode {
+        case .dynamic: return .dynamic
+        case .cozy: return .cozy
+        case .blossom: return .blossom
+        }
+    }
 }
 
 enum Theme {
@@ -157,7 +235,7 @@ enum Theme {
     static var appearance: AppAppearance = .system
 
     static var style: ThemeStyle {
-        mode == .cozy ? .cozy : .dynamic
+        .resolve(mode)
     }
 
     static var fontDesign: Font.Design { style.fontDesign }
@@ -171,8 +249,8 @@ enum Theme {
         let resolved: Font.Design
         if design == .monospaced {
             resolved = .monospaced
-        } else if mode == .cozy {
-            resolved = .serif
+        } else if mode != .dynamic {
+            resolved = style.fontDesign
         } else {
             resolved = design ?? .default
         }
@@ -201,12 +279,7 @@ enum Theme {
     }
 
     static var palette: ThemePalette {
-        switch (mode, isLight) {
-        case (.dynamic, false): return .dynamic
-        case (.cozy, false): return .cozy
-        case (.dynamic, true): return .dynamicLight
-        case (.cozy, true): return .cozyLight
-        }
+        .resolve(mode, light: isLight)
     }
 
     static var isCozy: Bool { mode == .cozy }
@@ -260,7 +333,12 @@ struct AppBackground: View {
 
     var body: some View {
         ZStack {
-            if model.backgroundStyle == .image, let image = model.backgroundImage {
+            if model.backgroundStyle == .theme, let image = NSImage(named: model.themeMode.photoName) {
+                imageBackground(image)
+                if model.themeMode == .blossom {
+                    PetalFall()
+                }
+            } else if model.backgroundStyle == .image, let image = model.backgroundImage {
                 imageBackground(image)
             } else if model.backgroundStyle == .video, let url = model.backgroundVideoURL {
                 LoopingVideoView(url: url)
@@ -289,6 +367,7 @@ struct AppBackground: View {
         .ignoresSafeArea()
         .animation(.easeInOut(duration: 0.5), value: model.backgroundStyle)
         .animation(.easeInOut(duration: 0.5), value: model.animatedBackground)
+        .animation(.easeInOut(duration: 0.5), value: model.themeMode)
     }
 
     private func imageBackground(_ image: NSImage) -> some View {
@@ -332,7 +411,7 @@ struct AnimatedBackgroundView: View {
 
     var body: some View {
         // Weather scenes need a smoother frame rate for falling rain.
-        let fps: Double = compact ? 12 : (scene.isAmbient ? 30 : 20)
+        let fps: Double = compact ? 12 : 30
         TimelineView(.animation(minimumInterval: 1.0 / fps, paused: reduceMotion)) { timeline in
             let time = timeline.date.timeIntervalSinceReferenceDate
             ZStack {
@@ -347,18 +426,6 @@ struct AnimatedBackgroundView: View {
                     CityRainScene(time: time, compact: compact)
                 case .snowyForest:
                     ForestScene(time: time, compact: compact, weather: .snow)
-                case .aurora:
-                    AuroraScene(time: time, compact: compact)
-                case .embers:
-                    EmbersScene(time: time, compact: compact)
-                case .tide:
-                    TideScene(time: time, compact: compact)
-                case .orbit:
-                    OrbitScene(time: time, compact: compact)
-                case .bokeh:
-                    BokehScene(time: time, compact: compact)
-                case .silk:
-                    SilkScene(time: time, compact: compact)
                 }
             }
         }
@@ -385,307 +452,42 @@ private struct SceneBase: View {
     }
 }
 
-private struct AuroraScene: View {
-    let time: Double
-    let compact: Bool
+/// Cherry petals drifting over the Blossom theme photo.
+private struct PetalFall: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Canvas { context, size in
-            let span = max(size.width, size.height)
-            let t = CGFloat(time)
-            let driftX = sin(t * 0.055) * span * 0.14
-            let driftY = cos(t * 0.042) * span * 0.1
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
+            let time = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { context, size in
+                for index in 0..<28 {
+                    let r = { (salt: Double) in fract(sin(Double(index) * 12.9898 + salt * 78.233) * 43758.5453) }
+                    let speed = 0.025 + r(1) * 0.03
+                    let progress = fract(time * speed + r(2))
+                    let sway = sin(time * (0.5 + r(3) * 0.6) + r(4) * 6) * size.width * 0.04
+                    let x = size.width * (r(5) * 1.2 - 0.1) + progress * size.width * 0.18 + sway
+                    let y = size.height * (progress * 1.15 - 0.08)
+                    let scale = 5 + r(6) * 7
+                    let spin = Angle.radians(time * (0.6 + r(7)) + r(8) * 6)
+                    // Flutter: squash the petal's width as it turns.
+                    let flutter = 0.45 + abs(sin(time * (1.2 + r(9)) + r(10) * 5)) * 0.55
 
-            glow(
-                in: &context,
-                center: CGPoint(x: size.width * 0.82 + driftX, y: size.height * 0.12 + driftY),
-                radius: span * (compact ? 0.42 : 0.62),
-                color: Theme.accent,
-                opacity: (Theme.isLight ? 0.52 : 0.32) * (compact ? 1.12 : 1)
-            )
-            glow(
-                in: &context,
-                center: CGPoint(
-                    x: size.width * 0.16 + cos(t * 0.036 + 1.7) * span * 0.16,
-                    y: size.height * 0.86 + sin(t * 0.048 + 0.6) * span * 0.1
-                ),
-                radius: span * (compact ? 0.36 : 0.54),
-                color: Theme.mint,
-                opacity: (Theme.isLight ? 0.34 : 0.2) * (compact ? 1.12 : 1)
-            )
-            glow(
-                in: &context,
-                center: CGPoint(
-                    x: size.width * 0.78 + cos(t * 0.03) * span * 0.12,
-                    y: size.height * 0.82 + cos(t * 0.04) * span * 0.12
-                ),
-                radius: span * (compact ? 0.3 : 0.44),
-                color: Theme.sky,
-                opacity: (Theme.isLight ? 0.28 : 0.16) * (compact ? 1.12 : 1)
-            )
-        }
-    }
-}
-
-private struct EmbersScene: View {
-    let time: Double
-    let compact: Bool
-
-    var body: some View {
-        Canvas { context, size in
-            let count = compact ? 14 : 38
-            let t = CGFloat(time)
-
-            glow(
-                in: &context,
-                center: CGPoint(x: size.width * 0.5, y: size.height * 0.95),
-                radius: max(size.width, size.height) * 0.7,
-                color: Theme.amber,
-                opacity: 0.14
-            )
-
-            for index in 0..<count {
-                let speed = 0.018 + Double(seeded(index, 3)) * 0.026
-                let progress = (time * speed + Double(seeded(index, 4))).truncatingRemainder(dividingBy: 1)
-                let sway = sin(t * (0.3 + seeded(index, 5) * 0.4) + seeded(index, 6) * 8)
-                let x = size.width * (0.08 + seeded(index, 1) * 0.84) + sway * size.width * 0.035
-                let y = size.height * (1.08 - progress * 1.16)
-                let flicker = 0.4 + 0.45 * ((sin(t * (0.8 + seeded(index, 7)) + seeded(index, 8) * 7) + 1) / 2)
-                let radius = (compact ? 0.9 : 1.4) + seeded(index, 2) * (compact ? 2.2 : 3.6)
-                let color = index.isMultiple(of: 3) ? Theme.amber : Theme.accent
-                let rect = CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)
-
-                context.fill(
-                    Path(ellipseIn: rect.insetBy(dx: -radius * 2.4, dy: -radius * 2.4)),
-                    with: .color(color.opacity(0.1 * flicker))
-                )
-                context.fill(Path(ellipseIn: rect), with: .color(color.opacity(0.75 * flicker)))
-            }
-        }
-    }
-}
-
-private struct TideScene: View {
-    let time: Double
-    let compact: Bool
-
-    var body: some View {
-        Canvas { context, size in
-            let layers: [(Color, CGFloat)] = [
-                (Theme.sky, 0.54),
-                (Theme.accent, 0.66),
-                (Theme.mint, 0.78),
-                (Theme.accentLight, 0.9)
-            ]
-            let count = compact ? 3 : 4
-
-            for index in 0..<count {
-                let (color, basePosition) = layers[index]
-                let baseY = size.height * basePosition
-                let amplitude = size.height * (0.035 + CGFloat(index) * 0.012)
-                let speed = 0.18 + Double(index) * 0.05
-                let phase = Double(index) * 1.7
-                let steps = compact ? 22 : 44
-
-                var path = Path()
-                path.move(to: CGPoint(x: 0, y: size.height))
-                path.addLine(to: CGPoint(x: 0, y: baseY))
-
-                for step in 0...steps {
-                    let fraction = CGFloat(step) / CGFloat(steps)
-                    let x = size.width * fraction
-                    let wave = sin(Double(fraction) * 5.4 + time * speed + phase)
-                    let chop = cos(Double(fraction) * 9.1 - time * speed * 0.7 + phase) * 0.32
-                    let y = baseY + CGFloat(wave + chop) * amplitude
-                    path.addLine(to: CGPoint(x: x, y: y))
-                }
-
-                path.addLine(to: CGPoint(x: size.width, y: size.height))
-                path.closeSubpath()
-
-                context.fill(
-                    path,
-                    with: .linearGradient(
-                        Gradient(colors: [color.opacity(Theme.isLight ? 0.42 : 0.3), color.opacity(0.02)]),
-                        startPoint: CGPoint(x: size.width * 0.5, y: baseY - amplitude * 2),
-                        endPoint: CGPoint(x: size.width * 0.5, y: size.height)
+                    var petal = context
+                    petal.translateBy(x: x, y: y)
+                    petal.rotate(by: spin)
+                    petal.scaleBy(x: flutter, y: 1)
+                    let rect = CGRect(x: -scale * 0.6, y: -scale, width: scale * 1.2, height: scale * 2)
+                    petal.fill(
+                        Path(ellipseIn: rect),
+                        with: .color(Color(hex: index.isMultiple(of: 3) ? 0xFFE3EE : 0xF9B6CF).opacity(0.55 + r(11) * 0.3))
                     )
-                )
-            }
-        }
-    }
-}
-
-private struct OrbitScene: View {
-    let time: Double
-    let compact: Bool
-
-    var body: some View {
-        Canvas { context, size in
-            let center = CGPoint(x: size.width * 0.5, y: size.height * 0.52)
-            let span = max(size.width, size.height)
-            let t = CGFloat(time)
-            let colors = [Theme.accent, Theme.mint, Theme.sky, Theme.amber]
-
-            glow(
-                in: &context,
-                center: center,
-                radius: span * 0.48,
-                color: Theme.accent,
-                opacity: (Theme.isLight ? 0.28 : 0.16) * (compact ? 1.12 : 1)
-            )
-
-            for index in 0..<5 {
-                let radius = span * (0.12 + CGFloat(index) * 0.085)
-                let color = colors[index % colors.count]
-                let rotation = t * (0.12 + CGFloat(index) * 0.03) + CGFloat(index) * 0.8
-                let arc = 0.42 + CGFloat(index) * 0.06
-
-                var path = Path()
-                path.addArc(
-                    center: center,
-                    radius: radius,
-                    startAngle: .radians(Double(rotation)),
-                    endAngle: .radians(Double(rotation + arc * .pi * 2)),
-                    clockwise: false
-                )
-
-                context.stroke(
-                    path,
-                    with: .color(color.opacity(compact ? 0.32 : 0.42)),
-                    style: StrokeStyle(lineWidth: compact ? 1 : 1.6, lineCap: .round)
-                )
-
-                let dotAngle = Double(rotation + arc * .pi * 2)
-                let dot = CGRect(
-                    x: center.x + CGFloat(cos(dotAngle)) * radius - 2,
-                    y: center.y + CGFloat(sin(dotAngle)) * radius - 2,
-                    width: 4,
-                    height: 4
-                )
-                context.fill(Path(ellipseIn: dot), with: .color(color.opacity(0.9)))
-            }
-        }
-    }
-}
-
-private struct BokehScene: View {
-    let time: Double
-    let compact: Bool
-
-    var body: some View {
-        Canvas { context, size in
-            let count = compact ? 9 : 18
-            let span = max(size.width, size.height)
-            let t = CGFloat(time)
-
-            for index in 0..<count {
-                let colors = [Theme.accent, Theme.mint, Theme.sky, Theme.amber]
-                let color = colors[index % colors.count]
-                let drift = 0.02 + Double(seeded(index, 2)) * 0.035
-                let x = size.width * (seeded(index, 1) + CGFloat(sin(time * drift + Double(seeded(index, 3)) * 6)) * 0.08)
-                let y = size.height * (seeded(index, 4) + CGFloat(cos(time * drift * 0.8 + Double(seeded(index, 5)) * 6)) * 0.08)
-                let radius = span * (0.035 + seeded(index, 6) * (compact ? 0.06 : 0.1))
-                let pulse = 0.75 + 0.25 * CGFloat((sin(time * 0.4 + Double(seeded(index, 7)) * 6) + 1) / 2)
-                let opacity = (compact ? 0.14 : 0.18) * pulse
-
-                let rect = CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)
-                context.fill(
-                    Path(ellipseIn: rect),
-                    with: .radialGradient(
-                        Gradient(colors: [color.opacity(opacity), color.opacity(opacity * 0.35), .clear]),
-                        center: CGPoint(x: x, y: y),
-                        startRadius: 0,
-                        endRadius: radius
-                    )
-                )
-
-                let core = radius * 0.12
-                context.fill(
-                    Path(ellipseIn: CGRect(x: x - core, y: y - core, width: core * 2, height: core * 2)),
-                    with: .color(color.opacity(opacity * 2.2))
-                )
-            }
-        }
-    }
-}
-
-private struct SilkScene: View {
-    let time: Double
-    let compact: Bool
-
-    var body: some View {
-        Canvas { context, size in
-            let count = compact ? 5 : 7
-            let colors = [Theme.accent, Theme.mint, Theme.sky, Theme.amber]
-            let steps = compact ? 18 : 32
-
-            for band in 0..<count {
-                let color = colors[band % colors.count]
-                let centerX = size.width * (CGFloat(band) + 0.5) / CGFloat(count)
-                let bandWidth = size.width / CGFloat(count) * (0.7 + seeded(band, 2) * 0.9)
-                let amplitude = size.width * (0.025 + seeded(band, 3) * 0.04)
-                let speed = 0.12 + Double(seeded(band, 4)) * 0.12
-                let phase = Double(seeded(band, 5)) * 6
-
-                var path = Path()
-                for step in 0...steps {
-                    let fraction = CGFloat(step) / CGFloat(steps)
-                    let y = -size.height * 0.1 + fraction * size.height * 1.2
-                    let offset = CGFloat(sin(Double(fraction) * 3.4 + time * speed + phase)) * amplitude
-                    let x = centerX + offset - bandWidth * 0.5
-                    if step == 0 {
-                        path.move(to: CGPoint(x: x, y: y))
-                    } else {
-                        path.addLine(to: CGPoint(x: x, y: y))
-                    }
                 }
-
-                for step in stride(from: steps, through: 0, by: -1) {
-                    let fraction = CGFloat(step) / CGFloat(steps)
-                    let y = -size.height * 0.1 + fraction * size.height * 1.2
-                    let offset = CGFloat(sin(Double(fraction) * 3.4 + time * speed + phase)) * amplitude
-                    let x = centerX + offset + bandWidth * 0.5
-                    path.addLine(to: CGPoint(x: x, y: y))
-                }
-
-                path.closeSubpath()
-                context.fill(
-                    path,
-                    with: .linearGradient(
-                        Gradient(colors: [color.opacity(Theme.isLight ? 0.2 : 0.14), color.opacity(Theme.isLight ? 0.08 : 0.05), color.opacity(0.01)]),
-                        startPoint: CGPoint(x: centerX, y: 0),
-                        endPoint: CGPoint(x: centerX, y: size.height)
-                    )
-                )
             }
         }
+        .allowsHitTesting(false)
     }
-}
 
-private func glow(
-    in context: inout GraphicsContext,
-    center: CGPoint,
-    radius: CGFloat,
-    color: Color,
-    opacity: Double
-) {
-    guard radius > 0 else { return }
-    let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-    context.fill(
-        Path(ellipseIn: rect),
-        with: .radialGradient(
-            Gradient(colors: [color.opacity(opacity), color.opacity(opacity * 0.28), .clear]),
-            center: center,
-            startRadius: 0,
-            endRadius: radius
-        )
-    )
-}
-
-private func seeded(_ index: Int, _ salt: Double) -> CGFloat {
-    let value = sin(Double(index) * 127.1 + salt * 311.7) * 43758.5453
-    return CGFloat(value - floor(value))
+    private func fract(_ value: Double) -> Double { value - floor(value) }
 }
 
 struct CadenceMark: View {
@@ -803,7 +605,7 @@ struct CircleControlStyle: ButtonStyle {
             .frame(width: size, height: size)
             .background {
                 Circle()
-                    .fill(filled ? accent : Theme.controlFill)
+                    .fill(filled ? accent : Theme.strongFill)
             }
             .overlay {
                 Circle()
@@ -1041,7 +843,7 @@ struct ShortcutHint: View {
     var body: some View {
         Text(text)
             .font(Theme.font(10, .medium, design: .monospaced))
-            .foregroundStyle(Theme.mutedDim)
+            .foregroundStyle(Theme.muted)
             .padding(.horizontal, Theme.s(6))
             .padding(.vertical, Theme.s(3))
             .background {

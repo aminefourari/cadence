@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use storage::Stats;
-use tasks::{build_plan, ordered_tasks, FocusSession, Quadrant, Task};
+use tasks::{build_plan, ordered_tasks, FocusSession, Priority, Task};
 use timer::{Phase, PomodoroConfig, PomodoroEngine};
 
 struct AppCore {
@@ -188,7 +188,10 @@ impl AppCore {
                     .and_then(Value::as_str)
                     .map(str::to_string);
                 if let Some(id) = &task_id {
-                    let valid = self.tasks.iter().any(|task| &task.id == id && !task.done);
+                    let valid = self
+                        .tasks
+                        .iter()
+                        .any(|task| &task.id == id && !task.done && !task.archived);
                     if !valid {
                         return Err(CoreFailure::new(
                             "bad_request",
@@ -204,6 +207,7 @@ impl AppCore {
             "sessions.list" => Ok(json!(self.sessions)),
             "tasks.add" => self.task_add(&request, now),
             "tasks.update" => self.task_update(&request),
+            "tasks.reorder" => self.task_reorder(&request),
             "tasks.toggle" => self.task_toggle(&request, now),
             "tasks.delete" => self.task_delete(&request),
             "tasks.clearOpen" => self.clear_open_tasks(),
@@ -240,21 +244,24 @@ impl AppCore {
             .map(|transition| transition.focus_minutes_added)
             .unwrap_or(self.engine.config().focus_minutes);
         let mut task_title = None;
-        let mut quadrant = None;
+        let mut priority = None;
         if let Some(task_id) = active_task_id.clone() {
             if let Some(task) = self.tasks.iter_mut().find(|task| task.id == task_id) {
                 task.completed_blocks = task.completed_blocks.saturating_add(1);
                 task.focused_minutes = task.focused_minutes.saturating_add(minutes);
                 task.last_focused_at_ms = Some(now);
                 task_title = Some(task.title.clone());
-                quadrant = Some(task.quadrant);
+                priority = Some(task.priority);
+                if !task.done {
+                    task.in_progress = true;
+                }
             }
         }
         self.sessions.push(FocusSession {
             id: new_id("session", now),
             task_id: active_task_id,
             task_title,
-            quadrant,
+            priority,
             intention,
             minutes,
             completed_at_ms: now,
@@ -270,7 +277,9 @@ impl AppCore {
             .filter(|title| !title.is_empty())
             .ok_or_else(|| CoreFailure::new("bad_request", "A task title is required."))?
             .to_string();
-        let quadrant = parse_quadrant(request).unwrap_or(Quadrant::ImportantNotUrgent);
+        let priority = parse_priority(request).unwrap_or_default();
+        let in_progress = request.get("inProgress").and_then(Value::as_bool).unwrap_or(false);
+        let position = self.tasks.iter().map(|task| task.position + 1).max().unwrap_or(0);
         let estimate_blocks = request
             .get("estimateBlocks")
             .and_then(Value::as_u64)
@@ -279,15 +288,12 @@ impl AppCore {
         self.tasks.push(Task {
             id: new_id("task", now),
             title,
-            quadrant,
+            priority,
             estimate_blocks,
-            completed_blocks: 0,
-            focused_minutes: 0,
-            done: false,
             created_at_ms: now,
-            completed_at_ms: None,
-            completed_day: None,
-            last_focused_at_ms: None,
+            in_progress,
+            position,
+            ..Task::default()
         });
         self.save();
         Ok(json!(ordered_tasks(&self.tasks)))
@@ -309,11 +315,36 @@ impl AppCore {
         {
             task.title = title.to_string();
         }
-        if let Some(quadrant) = parse_quadrant(request) {
-            task.quadrant = quadrant;
+        if let Some(priority) = parse_priority(request) {
+            task.priority = priority;
         }
         if let Some(estimate) = request.get("estimateBlocks").and_then(Value::as_u64) {
             task.estimate_blocks = (estimate.clamp(1, 24) as u32).max(task.completed_blocks);
+        }
+        if let Some(in_progress) = request.get("inProgress").and_then(Value::as_bool) {
+            task.in_progress = in_progress;
+        }
+        if let Some(archived) = request.get("archived").and_then(Value::as_bool) {
+            task.archived = archived;
+        }
+        let archived_id = task.archived.then(|| task.id.clone());
+        if archived_id.is_some() && self.engine.active_task_id() == archived_id.as_ref() {
+            self.engine.set_active_task(None);
+        }
+        self.save();
+        Ok(json!(ordered_tasks(&self.tasks)))
+    }
+
+    /// Sets manual order: each listed id gets its index as position.
+    fn task_reorder(&mut self, request: &Value) -> Result<Value, CoreFailure> {
+        let ids = request
+            .get("ids")
+            .and_then(Value::as_array)
+            .ok_or_else(|| CoreFailure::new("bad_request", "A list of task ids is required."))?;
+        for (index, id) in ids.iter().filter_map(Value::as_str).enumerate() {
+            if let Some(task) = self.tasks.iter_mut().find(|task| task.id == id) {
+                task.position = index as i64;
+            }
         }
         self.save();
         Ok(json!(ordered_tasks(&self.tasks)))
@@ -416,9 +447,9 @@ impl AppCore {
     }
 }
 
-fn parse_quadrant(request: &Value) -> Option<Quadrant> {
+fn parse_priority(request: &Value) -> Option<Priority> {
     request
-        .get("quadrant")
+        .get("priority")
         .cloned()
         .and_then(|value| serde_json::from_value(value).ok())
 }
@@ -573,7 +604,7 @@ mod tests {
         assert_eq!(
             session,
             [
-                "completedAtMs", "day", "id", "intention", "minutes", "quadrant", "taskId",
+                "completedAtMs", "day", "id", "intention", "minutes", "priority", "taskId",
                 "taskTitle",
             ]
         );
@@ -587,7 +618,7 @@ mod tests {
             .handle(json!({
                 "cmd": "tasks.add",
                 "title": "Draft the API specification",
-                "quadrant": "urgent_important",
+                "priority": "high",
                 "estimateBlocks": 3,
                 "nowMs": 500,
                 "day": day
@@ -626,5 +657,28 @@ mod tests {
             Some("A clear endpoint contract")
         );
         assert_eq!(core.sessions[0].task_id.as_deref(), Some(task_id.as_str()));
+        assert_eq!(tasks[0]["inProgress"], true);
+    }
+
+    #[test]
+    fn reorder_and_archive_tasks() {
+        let day = "2026-10-26";
+        let mut core = AppCore::new();
+        for (index, title) in ["a", "b"].iter().enumerate() {
+            core.handle(json!({"cmd": "tasks.add", "title": title, "nowMs": index, "day": day}))
+                .unwrap();
+        }
+        let ids: Vec<String> = core.tasks.iter().map(|task| task.id.clone()).collect();
+        core.handle(json!({"cmd": "tasks.reorder", "ids": [ids[1], ids[0]], "nowMs": 5, "day": day}))
+            .unwrap();
+        let tasks = core.handle(json!({"cmd": "tasks.list", "nowMs": 5, "day": day})).unwrap();
+        assert_eq!(tasks[0]["title"], "b");
+
+        core.handle(json!({"cmd": "timer.assignTask", "taskId": ids[0], "nowMs": 6, "day": day}))
+            .unwrap();
+        core.handle(json!({"cmd": "tasks.update", "id": ids[0], "archived": true, "nowMs": 7, "day": day}))
+            .unwrap();
+        assert!(core.tasks.iter().find(|task| task.id == ids[0]).unwrap().archived);
+        assert!(core.engine.active_task_id().is_none());
     }
 }

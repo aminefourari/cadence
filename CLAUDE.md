@@ -18,7 +18,7 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 ## Layout
 
 - `core/src/lib.rs` — C ABI (`cadence_core_invoke/free/abi_version`) + command router (`timer.*`, `tasks.*`, `sessions.list`, `plan.build`)
-- `core/src/timer.rs` — Pomodoro state machine; `tasks.rs` — tasks, Eisenhower quadrants, day planner; `storage.rs` — JSON persistence (`~/Library/Application Support/Cadence/core-state.json`)
+- `core/src/timer.rs` — Pomodoro state machine; `tasks.rs` — tasks (priority, in-progress, archived, position for the Kanban board), day planner; `storage.rs` — JSON persistence (`~/Library/Application Support/Cadence/core-state.json`)
 - `App/Sources/CoreClient.swift` — Swift wrapper for the ABI; `AppModel.swift` — main `ObservableObject`, 4 Hz heartbeat ticks the core
 - `App/Sources/YouTubePlayer.swift` — embedded WKWebView YouTube player; `BraveImporter.swift` — pulls the current video from Brave via osascript
 - `AppModel.focusActivityChanged` — single hook for focus start/stop side effects (music follows timer, `FocusGuard.swift`, Shortcuts)

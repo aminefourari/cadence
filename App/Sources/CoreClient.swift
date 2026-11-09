@@ -96,8 +96,9 @@ struct CoreClient {
 
     func addTask(
         title: String,
-        quadrant: TaskQuadrant,
+        priority: TaskPriority,
         estimateBlocks: Int,
+        inProgress: Bool = false,
         nowMs: Int,
         day: String
     ) throws -> [TaskItem] {
@@ -105,8 +106,9 @@ struct CoreClient {
             [
                 "cmd": "tasks.add",
                 "title": title,
-                "quadrant": quadrant.rawValue,
+                "priority": priority.rawValue,
                 "estimateBlocks": estimateBlocks,
+                "inProgress": inProgress,
                 "nowMs": nowMs,
                 "day": day
             ],
@@ -117,8 +119,10 @@ struct CoreClient {
     func updateTask(
         id: String,
         title: String? = nil,
-        quadrant: TaskQuadrant? = nil,
+        priority: TaskPriority? = nil,
         estimateBlocks: Int? = nil,
+        inProgress: Bool? = nil,
+        archived: Bool? = nil,
         nowMs: Int,
         day: String
     ) throws -> [TaskItem] {
@@ -129,9 +133,18 @@ struct CoreClient {
             "day": day
         ]
         if let title { request["title"] = title }
-        if let quadrant { request["quadrant"] = quadrant.rawValue }
+        if let priority { request["priority"] = priority.rawValue }
         if let estimateBlocks { request["estimateBlocks"] = estimateBlocks }
+        if let inProgress { request["inProgress"] = inProgress }
+        if let archived { request["archived"] = archived }
         return try call(request, as: [TaskItem].self)
+    }
+
+    func reorderTasks(ids: [String], nowMs: Int, day: String) throws -> [TaskItem] {
+        try call(
+            ["cmd": "tasks.reorder", "ids": ids, "nowMs": nowMs, "day": day],
+            as: [TaskItem].self
+        )
     }
 
     func toggleTask(id: String, nowMs: Int, day: String) throws -> [TaskItem] {

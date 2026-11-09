@@ -54,9 +54,9 @@ struct IntentionCheckInView: View {
 
                 if let task = model.activeTask {
                     HStack(spacing: Theme.s(7)) {
-                        Image(systemName: task.quadrant.icon)
+                        Image(systemName: task.priority.icon)
                             .font(Theme.font(9, .semibold))
-                            .foregroundStyle(task.quadrant.tint)
+                            .foregroundStyle(task.priority.tint)
                         Text(task.title)
                             .font(Theme.font(10.5, .medium))
                             .foregroundStyle(Theme.muted)
@@ -68,7 +68,7 @@ struct IntentionCheckInView: View {
                     .padding(.horizontal, Theme.s(10))
                     .frame(height: 30)
                     .background {
-                        Capsule().fill(task.quadrant.tint.opacity(0.08))
+                        Capsule().fill(task.priority.tint.opacity(0.08))
                     }
                     .padding(.top, Theme.s(15))
                 }

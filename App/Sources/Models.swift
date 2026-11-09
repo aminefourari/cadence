@@ -31,11 +31,39 @@ enum AppTab: String, CaseIterable, Identifiable {
 enum AppThemeMode: String, CaseIterable, Identifiable {
     case dynamic
     case cozy
+    case blossom
 
     var id: String { rawValue }
-    var title: String { self == .dynamic ? "Dynamic" : "Cozy" }
+    var title: String {
+        switch self {
+        case .dynamic: return "Dynamic"
+        case .cozy: return "Cozy"
+        case .blossom: return "Blossom"
+        }
+    }
     var subtitle: String {
-        self == .dynamic ? "Crisp type, coral light" : "Serif warmth, slower rhythm"
+        switch self {
+        case .dynamic: return "Crisp type, coral light"
+        case .cozy: return "Serif warmth, slower rhythm"
+        case .blossom: return "Rose petals, rounded softness"
+        }
+    }
+
+    /// Bundled Unsplash photo (Assets.xcassets) used by the "Theme photo" background.
+    var photoName: String {
+        switch self {
+        case .dynamic: return "ThemeDynamic"
+        case .cozy: return "ThemeCozy"
+        case .blossom: return "ThemeBlossom"
+        }
+    }
+
+    var photoCredit: String {
+        switch self {
+        case .dynamic: return "Lison Zhao"
+        case .cozy: return "Clay Banks"
+        case .blossom: return "Anita Austvika"
+        }
     }
 }
 
@@ -44,12 +72,6 @@ enum AnimatedBackground: String, CaseIterable, Identifiable {
     case rainyCafe
     case cityRain
     case snowyForest
-    case aurora
-    case embers
-    case tide
-    case orbit
-    case bokeh
-    case silk
 
     var id: String { rawValue }
 
@@ -59,12 +81,6 @@ enum AnimatedBackground: String, CaseIterable, Identifiable {
         case .rainyCafe: return "Rainy café"
         case .cityRain: return "City rain"
         case .snowyForest: return "Snowfall"
-        case .aurora: return "Aurora"
-        case .embers: return "Embers"
-        case .tide: return "Tide"
-        case .orbit: return "Orbit"
-        case .bokeh: return "Bokeh"
-        case .silk: return "Silk"
         }
     }
 
@@ -74,12 +90,6 @@ enum AnimatedBackground: String, CaseIterable, Identifiable {
         case .rainyCafe: return "Street lights through a wet window"
         case .cityRain: return "A night skyline in the rain"
         case .snowyForest: return "Quiet snow over the pines"
-        case .aurora: return "Slow drifting light"
-        case .embers: return "Warm rising sparks"
-        case .tide: return "Layered evening waves"
-        case .orbit: return "Quiet circling rings"
-        case .bokeh: return "Soft floating lights"
-        case .silk: return "Flowing bands of color"
         }
     }
 
@@ -89,20 +99,6 @@ enum AnimatedBackground: String, CaseIterable, Identifiable {
         case .rainyCafe: return "cup.and.saucer.fill"
         case .cityRain: return "building.2.fill"
         case .snowyForest: return "snowflake"
-        case .aurora: return "sparkles"
-        case .embers: return "flame.fill"
-        case .tide: return "water.waves"
-        case .orbit: return "circle.dashed"
-        case .bokeh: return "circle.grid.cross"
-        case .silk: return "wind"
-        }
-    }
-
-    /// Realistic weather scenes, as opposed to the abstract color fields.
-    var isAmbient: Bool {
-        switch self {
-        case .rainyForest, .rainyCafe, .cityRain, .snowyForest: return true
-        default: return false
         }
     }
 }
@@ -140,6 +136,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 }
 
 enum AppBackgroundStyle: String, CaseIterable, Identifiable {
+    case theme
     case animated
     case image
     case video
@@ -148,6 +145,7 @@ enum AppBackgroundStyle: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .theme: return "Theme photo"
         case .animated: return "Animated"
         case .image: return "Your image"
         case .video: return "Your video"
@@ -156,6 +154,7 @@ enum AppBackgroundStyle: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
+        case .theme: return "A photo that follows your theme"
         case .animated: return "A living scene from the gallery"
         case .image: return "A photo from your Mac"
         case .video: return "A looping video from your Mac"
@@ -164,6 +163,7 @@ enum AppBackgroundStyle: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .theme: return "photo.artframe"
         case .animated: return "sparkles"
         case .image: return "photo.fill"
         case .video: return "film.fill"
@@ -353,56 +353,34 @@ struct TimerState: Codable {
     }
 }
 
-enum TaskQuadrant: String, Codable, CaseIterable, Identifiable {
-    case urgentImportant = "urgent_important"
-    case importantNotUrgent = "important_not_urgent"
-    case urgentNotImportant = "urgent_not_important"
-    case neither
+enum TaskPriority: String, Codable, CaseIterable, Identifiable {
+    case high
+    case medium
+    case low
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .urgentImportant: return "Urgent & important"
-        case .importantNotUrgent: return "Important, not urgent"
-        case .urgentNotImportant: return "Urgent, not important"
-        case .neither: return "Neither"
-        }
-    }
-
-    var shortTitle: String {
-        switch self {
-        case .urgentImportant: return "Do first"
-        case .importantNotUrgent: return "Schedule"
-        case .urgentNotImportant: return "Quick wins"
-        case .neither: return "Let go"
+        case .high: return "High"
+        case .medium: return "Medium"
+        case .low: return "Low"
         }
     }
 
     var icon: String {
         switch self {
-        case .urgentImportant: return "flame.fill"
-        case .importantNotUrgent: return "leaf.fill"
-        case .urgentNotImportant: return "bolt.fill"
-        case .neither: return "cloud.fill"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .urgentImportant: return "Clear the fire"
-        case .importantNotUrgent: return "Protect the deep work"
-        case .urgentNotImportant: return "Keep it short"
-        case .neither: return "Not now"
+        case .high: return "chevron.up.2"
+        case .medium: return "equal"
+        case .low: return "chevron.down"
         }
     }
 
     var sortOrder: Int {
         switch self {
-        case .urgentImportant: return 0
-        case .importantNotUrgent: return 1
-        case .urgentNotImportant: return 2
-        case .neither: return 3
+        case .high: return 0
+        case .medium: return 1
+        case .low: return 2
         }
     }
 }
@@ -410,7 +388,7 @@ enum TaskQuadrant: String, Codable, CaseIterable, Identifiable {
 struct TaskItem: Codable, Identifiable, Equatable {
     let id: String
     var title: String
-    var quadrant: TaskQuadrant
+    var priority: TaskPriority
     var estimateBlocks: Int
     var completedBlocks: Int
     var focusedMinutes: Int
@@ -419,6 +397,9 @@ struct TaskItem: Codable, Identifiable, Equatable {
     var completedAtMs: Int?
     var completedDay: String?
     var lastFocusedAtMs: Int?
+    var inProgress: Bool
+    var archived: Bool
+    var position: Int
 
     var remainingBlocks: Int {
         max(0, estimateBlocks - completedBlocks)
@@ -450,7 +431,7 @@ struct PlanBlock: Codable, Identifiable, Equatable {
     let kind: PlanBlockKind
     let taskId: String?
     let taskTitle: String?
-    let quadrant: TaskQuadrant?
+    let priority: TaskPriority?
     let startAtMs: Int
     let endAtMs: Int
     let minutes: Int
@@ -480,7 +461,7 @@ struct FocusSession: Codable, Identifiable, Equatable {
     let id: String
     let taskId: String?
     let taskTitle: String?
-    let quadrant: TaskQuadrant?
+    let priority: TaskPriority?
     let intention: String?
     let minutes: Int
     let completedAtMs: Int

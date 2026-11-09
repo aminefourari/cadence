@@ -156,7 +156,7 @@ final class AppModel: ObservableObject {
         backgroundImageURL = appFolder.appendingPathComponent("background.png")
 
         let savedBackground = UserDefaults.standard.string(forKey: Self.backgroundKey)
-            .flatMap(AppBackgroundStyle.init(rawValue:)) ?? .animated
+            .flatMap(AppBackgroundStyle.init(rawValue:)) ?? .theme
         backgroundStyle = savedBackground
         let savedScene = UserDefaults.standard.string(forKey: Self.animatedBackgroundKey)
             .flatMap(AnimatedBackground.init(rawValue:)) ?? .rainyForest
@@ -237,17 +237,17 @@ final class AppModel: ObservableObject {
         do {
             let existing = try CoreClient.shared.tasks(nowMs: CoreClient.nowMs(), day: currentDay)
             if existing.isEmpty {
-                let demoTasks: [(String, TaskQuadrant, Int)] = [
-                    ("Draft the API specification", .urgentImportant, 3),
-                    ("Review the Q4 roadmap", .importantNotUrgent, 2),
-                    ("Reply to design feedback", .urgentNotImportant, 1),
-                    ("Send the weekly update", .urgentImportant, 1),
-                    ("Organize the reading list", .neither, 1)
+                let demoTasks: [(String, TaskPriority, Int)] = [
+                    ("Draft the API specification", .high, 3),
+                    ("Review the Q4 roadmap", .medium, 2),
+                    ("Reply to design feedback", .medium, 1),
+                    ("Send the weekly update", .high, 1),
+                    ("Organize the reading list", .low, 1)
                 ]
                 for item in demoTasks {
                     _ = try CoreClient.shared.addTask(
                         title: item.0,
-                        quadrant: item.1,
+                        priority: item.1,
                         estimateBlocks: item.2,
                         nowMs: CoreClient.nowMs(),
                         day: currentDay
@@ -286,7 +286,7 @@ final class AppModel: ObservableObject {
     }
 
     var openTasks: [TaskItem] {
-        tasks.filter { !$0.done }
+        tasks.filter { !$0.done && !$0.archived }
     }
 
     var todayCompletedTasks: [TaskItem] {
@@ -294,7 +294,7 @@ final class AppModel: ObservableObject {
     }
 
     var todayOpenTasks: [TaskItem] {
-        tasks.filter { !$0.done }
+        tasks.filter { !$0.done && !$0.archived }
     }
 
     var targetHours: Int {
@@ -505,11 +505,25 @@ final class AppModel: ObservableObject {
     }
 
     private static func parseAppNames(_ raw: String) -> Set<String> {
-        Set(
-            raw.split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-                .filter { !$0.isEmpty }
-        )
+        Set(splitAppNames(raw).map { $0.lowercased() })
+    }
+
+    private static func splitAppNames(_ raw: String) -> [String] {
+        raw.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    var distractingAppList: [String] { Self.splitAppNames(distractingApps) }
+
+    func toggleDistractingApp(_ name: String) {
+        var names = distractingAppList
+        if let index = names.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+            names.remove(at: index)
+        } else {
+            names.append(name)
+        }
+        distractingApps = names.joined(separator: ", ")
     }
 
     // MARK: - Navigation
@@ -670,7 +684,7 @@ final class AppModel: ObservableObject {
                     "Now focusing",
                     task.title,
                     icon: "scope",
-                    tint: task.quadrant.tint
+                    tint: task.priority.tint
                 )
             }
         } catch {
@@ -687,12 +701,13 @@ final class AppModel: ObservableObject {
         assignTask(nil)
     }
 
-    func addTask(title: String, quadrant: TaskQuadrant, estimateBlocks: Int) {
+    func addTask(title: String, priority: TaskPriority, estimateBlocks: Int, inProgress: Bool = false) {
         do {
             tasks = try CoreClient.shared.addTask(
                 title: title,
-                quadrant: quadrant,
+                priority: priority,
                 estimateBlocks: estimateBlocks,
+                inProgress: inProgress,
                 nowMs: CoreClient.nowMs(),
                 day: currentDay
             )
@@ -701,7 +716,7 @@ final class AppModel: ObservableObject {
                 "Task added",
                 title,
                 icon: "plus.circle.fill",
-                tint: quadrant.tint
+                tint: priority.tint
             )
         } catch {
             showToast(
@@ -715,16 +730,20 @@ final class AppModel: ObservableObject {
 
     func updateTask(
         _ task: TaskItem,
-        title: String,
-        quadrant: TaskQuadrant,
-        estimateBlocks: Int
+        title: String? = nil,
+        priority: TaskPriority? = nil,
+        estimateBlocks: Int? = nil,
+        inProgress: Bool? = nil,
+        archived: Bool? = nil
     ) {
         do {
             tasks = try CoreClient.shared.updateTask(
                 id: task.id,
                 title: title,
-                quadrant: quadrant,
+                priority: priority,
                 estimateBlocks: estimateBlocks,
+                inProgress: inProgress,
+                archived: archived,
                 nowMs: CoreClient.nowMs(),
                 day: currentDay
             )
@@ -732,6 +751,20 @@ final class AppModel: ObservableObject {
         } catch {
             showToast(
                 "Couldn't update task",
+                error.localizedDescription,
+                icon: "exclamationmark.triangle.fill",
+                tint: Theme.amber
+            )
+        }
+    }
+
+    func reorderTasks(ids: [String]) {
+        do {
+            tasks = try CoreClient.shared.reorderTasks(ids: ids, nowMs: CoreClient.nowMs(), day: currentDay)
+            refreshPlan()
+        } catch {
+            showToast(
+                "Couldn't reorder tasks",
                 error.localizedDescription,
                 icon: "exclamationmark.triangle.fill",
                 tint: Theme.amber
@@ -840,6 +873,8 @@ final class AppModel: ObservableObject {
     func setTheme(_ mode: AppThemeMode) {
         withAnimation(.easeInOut(duration: 0.35)) {
             themeMode = mode
+            // The weather scenes are tuned for Dynamic/Cozy; a theme change brings its own photo.
+            if backgroundStyle == .animated { backgroundStyle = .theme }
         }
     }
 
@@ -850,7 +885,8 @@ final class AppModel: ObservableObject {
     }
 
     func toggleTheme() {
-        setTheme(themeMode == .dynamic ? .cozy : .dynamic)
+        let all = AppThemeMode.allCases
+        setTheme(all[(all.firstIndex(of: themeMode)! + 1) % all.count])
     }
 
     func openSettings(_ section: AppSettingsSection = .timer) {
@@ -1065,13 +1101,12 @@ final class AppModel: ObservableObject {
     }
 }
 
-extension TaskQuadrant {
+extension TaskPriority {
     var tint: Color {
         switch self {
-        case .urgentImportant: return Theme.accent
-        case .importantNotUrgent: return Theme.mint
-        case .urgentNotImportant: return Theme.amber
-        case .neither: return Theme.mutedDim
+        case .high: return Theme.accent
+        case .medium: return Theme.amber
+        case .low: return Theme.sky
         }
     }
 }

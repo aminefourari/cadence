@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var draft = PomodoroConfig.defaults
     @State private var loaded = false
     @State private var section: AppSettingsSection = .timer
+    @State private var shortcutNames: [String]?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -278,11 +279,7 @@ struct SettingsView: View {
                         isOn: $model.focusGuardEnabled
                     )
                     SettingsDivider()
-                    textRow(
-                        title: "Distracting apps",
-                        prompt: AppModel.defaultDistractingApps,
-                        text: $model.distractingApps
-                    )
+                    DistractingAppsRow()
                     .opacity(model.focusGuardEnabled ? 1 : 0.5)
                     .disabled(!model.focusGuardEnabled)
                 }
@@ -291,13 +288,18 @@ struct SettingsView: View {
 
             SettingsSection(title: "Shortcuts") {
                 VStack(alignment: .leading, spacing: 0) {
-                    textRow(title: "When focus starts", prompt: "e.g. Focus On", text: $model.focusStartShortcut)
+                    ShortcutPickerRow(title: "When focus starts", selection: $model.focusStartShortcut, available: shortcutNames)
                     SettingsDivider()
-                    textRow(title: "When focus stops", prompt: "e.g. Focus Off", text: $model.focusEndShortcut)
+                    ShortcutPickerRow(title: "When focus stops", selection: $model.focusEndShortcut, available: shortcutNames)
                 }
                 .panel(cornerRadius: Theme.radius(18))
+                .task { shortcutNames = await ShortcutsLibrary.names() }
+                // Pick up shortcuts created in the Shortcuts app while Cadence was in the background.
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    Task { shortcutNames = await ShortcutsLibrary.names() }
+                }
 
-                Text("Name a shortcut from the Shortcuts app, for example one that uses “Set Focus” to turn Do Not Disturb on and off.")
+                Text("Pick a shortcut from the Shortcuts app, for example one that uses “Set Focus” to turn Do Not Disturb on and off.")
                     .font(Theme.font(9.5, .medium))
                     .foregroundStyle(Theme.mutedDim)
                     .padding(.leading, Theme.s(2))
@@ -340,31 +342,6 @@ struct SettingsView: View {
         .frame(height: 62)
     }
 
-    private func textRow(title: String, prompt: String, text: Binding<String>) -> some View {
-        HStack(spacing: Theme.s(12)) {
-            Text(title)
-                .font(Theme.font(11, .medium))
-                .foregroundStyle(Theme.cream.opacity(0.85))
-                .frame(width: 130, alignment: .leading)
-            TextField(prompt, text: text)
-                .textFieldStyle(.plain)
-                .font(Theme.font(11, .medium))
-                .foregroundStyle(Theme.cream)
-                .padding(.horizontal, Theme.s(10))
-                .frame(height: 28)
-                .background {
-                    RoundedRectangle(cornerRadius: Theme.radius(8), style: .continuous)
-                        .fill(Theme.controlFill)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: Theme.radius(8), style: .continuous)
-                        .strokeBorder(Theme.controlStroke, lineWidth: 1)
-                }
-        }
-        .padding(.horizontal, Theme.s(14))
-        .frame(height: 48)
-    }
-
     private var appearanceSection: some View {
         SettingsSection(title: "Theme") {
             VStack(alignment: .leading, spacing: Theme.s(8)) {
@@ -372,9 +349,7 @@ struct SettingsView: View {
                     ForEach(AppThemeMode.allCases) { mode in
                         ThemeChoiceCard(
                             mode: mode,
-                            palette: mode == .dynamic
-                                ? (Theme.isLight ? .dynamicLight : .dynamic)
-                                : (Theme.isLight ? .cozyLight : .cozy),
+                            palette: .resolve(mode, light: Theme.isLight),
                             selected: model.themeMode == mode
                         ) {
                             model.setTheme(mode)
@@ -407,8 +382,51 @@ struct SettingsView: View {
 
     private var animatedScenesSection: some View {
         VStack(alignment: .leading, spacing: Theme.s(12)) {
-            sceneGrid(title: "Ambient scenes", scenes: AnimatedBackground.allCases.filter(\.isAmbient), columns: 2, height: 64)
-            sceneGrid(title: "Abstract", scenes: AnimatedBackground.allCases.filter { !$0.isAmbient }, columns: 3, height: 48)
+            themePhotoSection
+            sceneGrid(title: "Ambient scenes", scenes: AnimatedBackground.allCases, columns: 2, height: 64)
+        }
+    }
+
+    private var themePhotoSection: some View {
+        SettingsSection(title: "Theme photo") {
+            let selected = model.backgroundStyle == .theme
+            Button {
+                model.setBackgroundStyle(.theme)
+            } label: {
+                HStack(spacing: Theme.s(11)) {
+                    Image(model.themeMode.photoName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 72, height: 43)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radius(8), style: .continuous))
+                    VStack(alignment: .leading, spacing: Theme.s(2)) {
+                        Text("\(model.themeMode.title) photo")
+                            .font(Theme.font(11, .semibold))
+                            .foregroundStyle(Theme.cream)
+                        Text("Changes with your theme · Photo by \(model.themeMode.photoCredit) on Unsplash")
+                            .font(Theme.font(9, .medium))
+                            .foregroundStyle(selected ? Theme.accent : Theme.mutedDim)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    if selected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(Theme.font(12, .semibold))
+                            .foregroundStyle(Theme.accent)
+                    }
+                }
+                .padding(Theme.s(8))
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.radius(11), style: .continuous)
+                        .fill(selected ? Theme.accent.opacity(0.08) : Theme.controlFill)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.radius(11), style: .continuous)
+                        .strokeBorder(selected ? Theme.accent.opacity(0.3) : Theme.controlStroke, lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -720,7 +738,7 @@ private struct ThemeChoiceCard: View {
                         .frame(width: 38, height: 38)
 
                     Text("Aa")
-                        .font(Theme.font(15, .semibold, design: mode == .cozy ? .serif : .default))
+                        .font(Theme.font(15, .semibold, design: ThemeStyle.resolve(mode).fontDesign))
                         .foregroundStyle(palette.cream)
 
                     HStack(spacing: Theme.s(2)) {
@@ -738,7 +756,8 @@ private struct ThemeChoiceCard: View {
                     Text(mode.subtitle)
                         .font(Theme.font(8.5, .medium))
                         .foregroundStyle(Theme.mutedDim)
-                        .lineLimit(1)
+                        .lineLimit(12)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 0)
@@ -989,5 +1008,261 @@ private struct StepperButton: View {
         .buttonStyle(.plain)
         .disabled(!enabled)
         .onHover { hovered = $0 }
+    }
+}
+
+private struct DistractingAppsRow: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var showPicker = false
+
+    var body: some View {
+        HStack(spacing: Theme.s(12)) {
+            Text("Distracting apps")
+                .font(Theme.font(11, .medium))
+                .foregroundStyle(Theme.cream.opacity(0.85))
+                .frame(width: 130, alignment: .leading)
+
+            Button {
+                showPicker = true
+            } label: {
+                HStack(spacing: Theme.s(8)) {
+                    Text(summary)
+                        .font(Theme.font(11, .medium))
+                        .foregroundStyle(model.distractingAppList.isEmpty ? Theme.muted : Theme.cream)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(Theme.font(9, .semibold))
+                        .foregroundStyle(Theme.muted)
+                }
+                .padding(.horizontal, Theme.s(10))
+                .frame(height: 28)
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.radius(8), style: .continuous)
+                        .fill(Theme.controlFill)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.radius(8), style: .continuous)
+                        .strokeBorder(Theme.controlStroke, lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showPicker, arrowEdge: .bottom) {
+                AppPickerList()
+                    .environmentObject(model)
+            }
+        }
+        .padding(.horizontal, Theme.s(14))
+        .frame(height: 48)
+    }
+
+    private var summary: String {
+        let names = model.distractingAppList
+        switch names.count {
+        case 0: return "None selected"
+        case 1...3: return names.joined(separator: ", ")
+        default: return names.prefix(2).joined(separator: ", ") + " +\(names.count - 2) more"
+        }
+    }
+}
+
+private struct AppPickerList: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var installed: [InstalledApp]?
+    @State private var query = ""
+
+    /// Installed apps plus anything already selected that isn't installed, so it can still be unticked.
+    private var apps: [InstalledApp] {
+        let installed = installed ?? []
+        let known = Set(installed.map(\.id))
+        let missing = model.distractingAppList
+            .filter { !known.contains($0.lowercased()) }
+            .map { InstalledApp(name: $0, url: nil) }
+        let all = (missing + installed).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        let q = query.trimmingCharacters(in: .whitespaces)
+        return q.isEmpty ? all : all.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+
+    var body: some View {
+        let selected = Set(model.distractingAppList.map { $0.lowercased() })
+        VStack(spacing: 0) {
+            HStack(spacing: Theme.s(6)) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(Theme.muted)
+                TextField("Search apps", text: $query)
+                    .textFieldStyle(.plain)
+            }
+            .font(Theme.font(11, .medium))
+            .padding(.horizontal, Theme.s(10))
+            .frame(height: 34)
+
+            Divider()
+
+            if installed == nil {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(apps) { app in
+                            AppPickerRow(app: app, selected: selected.contains(app.id)) {
+                                model.toggleDistractingApp(app.name)
+                            }
+                        }
+                    }
+                    .padding(.vertical, Theme.s(4))
+                }
+            }
+
+            Divider()
+
+            HStack {
+                Text("\(selected.count) selected")
+                    .font(Theme.font(10, .medium))
+                    .foregroundStyle(Theme.muted)
+                Spacer()
+                if !selected.isEmpty {
+                    Button("Clear") { model.distractingApps = "" }
+                        .buttonStyle(.link)
+                        .font(Theme.font(10, .medium))
+                }
+            }
+            .padding(.horizontal, Theme.s(10))
+            .frame(height: 30)
+        }
+        .frame(width: 280, height: 380)
+        .task {
+            installed = await Task.detached { InstalledApps.scan() }.value
+        }
+    }
+}
+
+private struct AppPickerRow: View {
+    let app: InstalledApp
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Theme.s(8)) {
+                Group {
+                    if let url = app.url {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                            .resizable()
+                    } else {
+                        Image(systemName: "app.dashed")
+                            .resizable()
+                            .foregroundStyle(Theme.muted)
+                    }
+                }
+                .frame(width: 20, height: 20)
+
+                Text(app.name)
+                    .font(Theme.font(11.5, .medium))
+                    .foregroundStyle(Theme.cream)
+                    .lineLimit(1)
+                if app.url == nil {
+                    Text("not installed")
+                        .font(Theme.font(9.5, .medium))
+                        .foregroundStyle(Theme.muted)
+                }
+                Spacer()
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(Theme.font(13, .medium))
+                    .foregroundStyle(selected ? Theme.accent : Theme.muted.opacity(0.6))
+            }
+            .padding(.horizontal, Theme.s(10))
+            .frame(height: 30)
+            .background {
+                RoundedRectangle(cornerRadius: Theme.radius(6), style: .continuous)
+                    .fill(hovered ? Theme.controlFillHover : .clear)
+                    .padding(.horizontal, Theme.s(4))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+    }
+}
+
+private struct ShortcutPickerRow: View {
+    let title: String
+    @Binding var selection: String
+    /// nil while loading.
+    let available: [String]?
+
+    private var missing: Bool {
+        guard let available, !selection.isEmpty else { return false }
+        return !available.contains(selection)
+    }
+
+    var body: some View {
+        HStack(spacing: Theme.s(12)) {
+            Text(title)
+                .font(Theme.font(11, .medium))
+                .foregroundStyle(Theme.cream.opacity(0.85))
+                .frame(width: 130, alignment: .leading)
+
+            Menu {
+                Button { selection = "" } label: { item("None", checked: selection.isEmpty) }
+                Divider()
+                if let available, !available.isEmpty {
+                    ForEach(available, id: \.self) { name in
+                        Button { selection = name } label: { item(name, checked: name == selection) }
+                    }
+                } else {
+                    Text(available == nil ? "Loading shortcuts…" : "No shortcuts yet")
+                }
+                Divider()
+                Button("Open Shortcuts…") {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Shortcuts.app"))
+                }
+            } label: {
+                HStack(spacing: Theme.s(6)) {
+                    if missing {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.amber)
+                            .help("“\(selection)” isn't in the Shortcuts app anymore")
+                    }
+                    Text(selection.isEmpty ? "None" : selection)
+                        .foregroundStyle(selection.isEmpty ? Theme.muted : Theme.cream)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(Theme.font(9, .semibold))
+                        .foregroundStyle(Theme.muted)
+                }
+                .font(Theme.font(11, .medium))
+                .padding(.horizontal, Theme.s(10))
+                .frame(height: 28)
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.radius(8), style: .continuous)
+                        .fill(Theme.controlFill)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.radius(8), style: .continuous)
+                        .strokeBorder(Theme.controlStroke, lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, Theme.s(14))
+        .frame(height: 48)
+    }
+
+    @ViewBuilder
+    private func item(_ name: String, checked: Bool) -> some View {
+        if checked {
+            Label(name, systemImage: "checkmark")
+        } else {
+            Text(name)
+        }
     }
 }
