@@ -99,21 +99,21 @@ struct CoreClient {
         priority: TaskPriority,
         estimateBlocks: Int,
         inProgress: Bool = false,
+        dueAtMs: Int? = nil,
         nowMs: Int,
         day: String
     ) throws -> [TaskItem] {
-        try call(
-            [
-                "cmd": "tasks.add",
-                "title": title,
-                "priority": priority.rawValue,
-                "estimateBlocks": estimateBlocks,
-                "inProgress": inProgress,
-                "nowMs": nowMs,
-                "day": day
-            ],
-            as: [TaskItem].self
-        )
+        var request: [String: Any] = [
+            "cmd": "tasks.add",
+            "title": title,
+            "priority": priority.rawValue,
+            "estimateBlocks": estimateBlocks,
+            "inProgress": inProgress,
+            "nowMs": nowMs,
+            "day": day
+        ]
+        if let dueAtMs { request["dueAtMs"] = dueAtMs }
+        return try call(request, as: [TaskItem].self)
     }
 
     func updateTask(
@@ -123,6 +123,7 @@ struct CoreClient {
         estimateBlocks: Int? = nil,
         inProgress: Bool? = nil,
         archived: Bool? = nil,
+        dueAtMs: Int?? = nil,
         nowMs: Int,
         day: String
     ) throws -> [TaskItem] {
@@ -137,6 +138,8 @@ struct CoreClient {
         if let estimateBlocks { request["estimateBlocks"] = estimateBlocks }
         if let inProgress { request["inProgress"] = inProgress }
         if let archived { request["archived"] = archived }
+        // .some(nil) clears the deadline.
+        if let dueAtMs { request["dueAtMs"] = dueAtMs ?? NSNull() }
         return try call(request, as: [TaskItem].self)
     }
 

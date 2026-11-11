@@ -406,6 +406,12 @@ struct TaskItem: Codable, Identifiable, Equatable {
     var inProgress: Bool
     var archived: Bool
     var position: Int
+    /// Deadline (date and time), epoch milliseconds.
+    var dueAtMs: Int?
+
+    var dueDate: Date? {
+        dueAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000) }
+    }
 
     var remainingBlocks: Int {
         max(0, estimateBlocks - completedBlocks)

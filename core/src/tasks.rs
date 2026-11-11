@@ -45,6 +45,8 @@ pub struct Task {
     pub archived: bool,
     /// Manual order on the board; lower first.
     pub position: i64,
+    /// Optional deadline (date and time), epoch milliseconds.
+    pub due_at_ms: Option<u64>,
 }
 
 impl Default for Task {
@@ -64,6 +66,7 @@ impl Default for Task {
             in_progress: false,
             archived: false,
             position: 0,
+            due_at_ms: None,
         }
     }
 }
