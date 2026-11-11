@@ -14,7 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use storage::Stats;
-use tasks::{build_plan, ordered_tasks, FocusSession, Priority, Task};
+use tasks::{blocks_for, build_plan, ordered_tasks, FocusSession, Priority, Task};
 use timer::{Phase, PomodoroConfig, PomodoroEngine};
 
 struct AppCore {
@@ -171,6 +171,12 @@ impl AppCore {
                         })
                     })?;
                 self.engine.configure(config);
+                let focus = self.engine.config().focus_minutes;
+                for task in &mut self.tasks {
+                    if let Some(minutes) = task.estimate_minutes {
+                        task.estimate_blocks = blocks_for(minutes, focus).max(task.completed_blocks);
+                    }
+                }
                 self.save();
                 Ok(self.state_value(now))
             }
@@ -317,11 +323,15 @@ impl AppCore {
         let priority = parse_priority(request).unwrap_or_default();
         let in_progress = request.get("inProgress").and_then(Value::as_bool).unwrap_or(false);
         let position = self.tasks.iter().map(|task| task.position + 1).max().unwrap_or(0);
-        let estimate_blocks = request
-            .get("estimateBlocks")
-            .and_then(Value::as_u64)
-            .unwrap_or(1)
-            .clamp(1, 24) as u32;
+        let estimate_minutes = parse_estimate_minutes(request);
+        let estimate_blocks = match estimate_minutes {
+            Some(minutes) => blocks_for(minutes, self.engine.config().focus_minutes),
+            None => request
+                .get("estimateBlocks")
+                .and_then(Value::as_u64)
+                .unwrap_or(1)
+                .clamp(1, 24) as u32,
+        };
         let due_at_ms = parse_due_at(request)?.flatten();
         self.tasks.push(Task {
             id: new_id("task", now),
@@ -332,6 +342,7 @@ impl AppCore {
             in_progress,
             position,
             due_at_ms,
+            estimate_minutes,
             ..Task::default()
         });
         self.save();
@@ -344,6 +355,7 @@ impl AppCore {
             .and_then(Value::as_str)
             .ok_or_else(|| CoreFailure::new("bad_request", "A task id is required."))?;
         let due_at_ms = parse_due_at(request)?;
+        let focus = self.engine.config().focus_minutes;
         let Some(task) = self.tasks.iter_mut().find(|task| task.id == id) else {
             return Err(CoreFailure::new("not_found", "Task not found."));
         };
@@ -363,6 +375,11 @@ impl AppCore {
         }
         if let Some(estimate) = request.get("estimateBlocks").and_then(Value::as_u64) {
             task.estimate_blocks = (estimate.clamp(1, 24) as u32).max(task.completed_blocks);
+            task.estimate_minutes = None;
+        }
+        if let Some(minutes) = parse_estimate_minutes(request) {
+            task.estimate_minutes = Some(minutes);
+            task.estimate_blocks = blocks_for(minutes, focus).max(task.completed_blocks);
         }
         if let Some(in_progress) = request.get("inProgress").and_then(Value::as_bool) {
             task.in_progress = in_progress;
@@ -489,6 +506,13 @@ impl AppCore {
         }
         self.disk_mtime = self.file_mtime();
     }
+}
+
+fn parse_estimate_minutes(request: &Value) -> Option<u32> {
+    request
+        .get("estimateMinutes")
+        .and_then(Value::as_u64)
+        .map(|minutes| minutes.clamp(1, 24 * 60) as u32)
 }
 
 fn parse_priority(request: &Value) -> Option<Priority> {
@@ -777,5 +801,26 @@ mod tests {
         assert_eq!(kept[0]["dueAtMs"], due);
         let cleared = core.handle(json!({"cmd": "tasks.update", "id": id, "dueAtMs": null})).unwrap();
         assert!(cleared[0]["dueAtMs"].is_null());
+    }
+
+    #[test]
+    fn time_estimates_become_blocks_and_follow_the_focus_length() {
+        let mut core = AppCore::new();
+        let added = core
+            .handle(json!({"cmd": "tasks.add", "title": "a", "estimateMinutes": 150, "nowMs": 1}))
+            .unwrap();
+        assert_eq!(added[0]["estimateBlocks"], 6, "150 min at 25 min/block rounds up to 6");
+        let id = added[0]["id"].as_str().unwrap().to_string();
+
+        let mut config = serde_json::to_value(core.engine.config()).unwrap();
+        config["focusMinutes"] = json!(50);
+        core.handle(json!({"cmd": "timer.configure", "config": config, "nowMs": 2})).unwrap();
+        assert_eq!(core.tasks[0].estimate_blocks, 3);
+
+        let updated = core
+            .handle(json!({"cmd": "tasks.update", "id": id, "estimateBlocks": 2, "nowMs": 3}))
+            .unwrap();
+        assert_eq!(updated[0]["estimateBlocks"], 2);
+        assert!(updated[0]["estimateMinutes"].is_null(), "an explicit block count wins");
     }
 }

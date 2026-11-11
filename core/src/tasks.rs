@@ -47,6 +47,9 @@ pub struct Task {
     pub position: i64,
     /// Optional deadline (date and time), epoch milliseconds.
     pub due_at_ms: Option<u64>,
+    /// Time estimate when given in minutes; `estimate_blocks` is derived from it
+    /// and re-derived when the focus length changes.
+    pub estimate_minutes: Option<u32>,
 }
 
 impl Default for Task {
@@ -67,8 +70,14 @@ impl Default for Task {
             archived: false,
             position: 0,
             due_at_ms: None,
+            estimate_minutes: None,
         }
     }
+}
+
+/// Focus blocks needed for `minutes` of work, rounded up, 1–24.
+pub fn blocks_for(minutes: u32, focus_minutes: u32) -> u32 {
+    minutes.div_ceil(focus_minutes.max(1)).clamp(1, 24)
 }
 
 impl Task {

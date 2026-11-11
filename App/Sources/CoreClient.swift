@@ -99,6 +99,7 @@ struct CoreClient {
         priority: TaskPriority,
         estimateBlocks: Int,
         inProgress: Bool = false,
+        estimateMinutes: Int? = nil,
         dueAtMs: Int? = nil,
         nowMs: Int,
         day: String
@@ -113,6 +114,7 @@ struct CoreClient {
             "day": day
         ]
         if let dueAtMs { request["dueAtMs"] = dueAtMs }
+        if let estimateMinutes { request["estimateMinutes"] = estimateMinutes }
         return try call(request, as: [TaskItem].self)
     }
 
@@ -123,6 +125,7 @@ struct CoreClient {
         estimateBlocks: Int? = nil,
         inProgress: Bool? = nil,
         archived: Bool? = nil,
+        estimateMinutes: Int? = nil,
         dueAtMs: Int?? = nil,
         nowMs: Int,
         day: String
@@ -138,6 +141,7 @@ struct CoreClient {
         if let estimateBlocks { request["estimateBlocks"] = estimateBlocks }
         if let inProgress { request["inProgress"] = inProgress }
         if let archived { request["archived"] = archived }
+        if let estimateMinutes { request["estimateMinutes"] = estimateMinutes }
         // .some(nil) clears the deadline.
         if let dueAtMs { request["dueAtMs"] = dueAtMs ?? NSNull() }
         return try call(request, as: [TaskItem].self)
