@@ -14,7 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use storage::Stats;
-use tasks::{blocks_for, build_plan, ordered_tasks, FocusSession, Priority, Task};
+use tasks::{blocks_for, build_plan, ordered_tasks, FocusSession, PlanStart, Priority, Task};
 use timer::{Phase, PomodoroConfig, PomodoroEngine};
 
 struct AppCore {
@@ -478,13 +478,16 @@ impl AppCore {
             .and_then(Value::as_u64)
             .unwrap_or(5)
             .min(60) as u32;
-        let plan = build_plan(
-            &self.tasks,
-            self.engine.config(),
-            now,
-            target_minutes,
-            buffer_minutes,
-        );
+        let state = self.engine.state(now, &self.stats);
+        let in_focus = state.running && state.phase == Phase::Focus;
+        let start = PlanStart {
+            at_ms: if state.running { state.ends_at_ms.unwrap_or(now) } else { now },
+            done_minutes: state.today_focus_minutes + if in_focus { (state.total_ms / 60_000) as u32 } else { 0 },
+            completed_in_cycle: state.completed_in_cycle + u32::from(in_focus),
+            after_focus: in_focus,
+            running_task_id: if in_focus { state.active_task_id.clone() } else { None },
+        };
+        let plan = build_plan(&self.tasks, self.engine.config(), &start, target_minutes, buffer_minutes);
         serde_json::to_value(plan)
             .map_err(|error| CoreFailure::new("serialization", error.to_string()))
     }

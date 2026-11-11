@@ -490,11 +490,16 @@ private struct PlanPanel: View {
                         Capsule().fill(Theme.cream.opacity(0.06))
                         Capsule()
                             .fill(Theme.accent)
-                            .frame(width: geometry.size.width * min(1, Double(model.plan.focusMinutes) / Double(max(1, model.dailyTargetMinutes))))
+                            .opacity(0.35)
+                            .frame(width: geometry.size.width * fraction(model.plan.doneMinutes + model.plan.focusMinutes))
+                        Capsule()
+                            .fill(Theme.accent)
+                            .frame(width: geometry.size.width * fraction(model.plan.doneMinutes))
                     }
                 }
                 .frame(height: 4)
-                Text("\(model.plan.focusMinutes)m")
+                .help("\(model.plan.doneMinutes)m done today, \(model.plan.focusMinutes)m planned")
+                Text("\(model.plan.doneMinutes + model.plan.focusMinutes)m")
                     .font(Theme.font(8.5, .medium, design: .monospaced))
                     .foregroundStyle(Theme.mutedDim)
                     .frame(width: 36, alignment: .trailing)
@@ -508,10 +513,12 @@ private struct PlanPanel: View {
 
             if model.plan.blocks.isEmpty {
                 VStack(spacing: Theme.s(7)) {
-                    Image(systemName: "calendar.badge.clock")
+                    Image(systemName: targetMet ? "checkmark.seal" : "calendar.badge.clock")
                         .font(Theme.font(22, .light))
                         .foregroundStyle(Theme.mutedDim.opacity(0.5))
-                    Text("Add tasks to generate a time-boxed day.")
+                    Text(targetMet
+                         ? "Today's focus target is met. Raise it to plan more."
+                         : "Add tasks to generate a time-boxed day.")
                         .font(Theme.font(9.5, .medium))
                         .foregroundStyle(Theme.mutedDim)
                         .multilineTextAlignment(.center)
@@ -534,14 +541,28 @@ private struct PlanPanel: View {
                 .frame(maxHeight: .infinity)
             }
 
-            Text("5 min buffers included · starts at \(planStartLabel)")
+            Text(lateCount > 0
+                 ? "\(lateCount) \(lateCount == 1 ? "block misses its" : "blocks miss their") deadline · starts at \(planStartLabel)"
+                 : "Deadlines first · 5 min buffers · starts at \(planStartLabel)")
                 .font(Theme.font(8.5, .medium))
-                .foregroundStyle(Theme.mutedDim.opacity(0.75))
+                .foregroundStyle(lateCount > 0 ? Theme.danger : Theme.mutedDim.opacity(0.75))
                 .lineLimit(1)
                 .padding(.top, Theme.s(8))
         }
         .padding(Theme.s(15))
         .panel(cornerRadius: Theme.radius(22))
+    }
+
+    private var targetMet: Bool {
+        model.plan.doneMinutes >= model.dailyTargetMinutes
+    }
+
+    private var lateCount: Int {
+        model.plan.blocks.filter(\.late).count
+    }
+
+    private func fraction(_ minutes: Int) -> Double {
+        min(1, Double(minutes) / Double(max(1, model.dailyTargetMinutes)))
     }
 
     private var planStartLabel: String {
@@ -588,11 +609,13 @@ private struct PlanBlockRow: View {
                     .foregroundStyle(block.kind.isFocus ? Theme.cream.opacity(0.85) : Theme.muted)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(block.kind.isFocus
+                Text(block.late
+                     ? "Ends after the deadline · \(block.minutes)m"
+                     : block.kind.isFocus
                      ? "\(block.priority.map { "\($0.title) priority" } ?? "Focus") · \(block.minutes)m"
                      : "Recovery · \(block.minutes)m")
                     .font(Theme.font(8, .medium))
-                    .foregroundStyle(Theme.mutedDim)
+                    .foregroundStyle(block.late ? Theme.danger : Theme.mutedDim)
             }
 
             Spacer(minLength: 2)
