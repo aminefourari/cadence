@@ -13,6 +13,8 @@ const PROTOCOL_VERSION: &str = "2025-06-18";
 fn tools() -> Value {
     let id = json!({"type": "string", "description": "Task id from list_tasks."});
     let priority = json!({"type": "string", "enum": ["high", "medium", "low"]});
+    let due = json!({"type": ["string", "null"],
+        "description": "Deadline in local time, e.g. 2026-11-14T15:30 (an offset like +01:00 or Z is also accepted; a bare date means 23:59 that day). In update_task, null or \"\" clears it."});
     let estimate = json!({"type": "integer", "minimum": 1, "maximum": 24,
         "description": "Estimated focus blocks (Pomodoros)."});
     json!([
@@ -20,11 +22,11 @@ fn tools() -> Value {
          "inputSchema": {"type": "object", "properties": {"includeArchived": {"type": "boolean"}, "includeDone": {"type": "boolean", "description": "Default true."}}}},
         {"name": "add_task", "description": "Add a task to the Cadence board.",
          "inputSchema": {"type": "object", "required": ["title"], "properties": {
-            "title": {"type": "string"}, "priority": priority, "estimateBlocks": estimate,
+            "title": {"type": "string"}, "priority": priority, "estimateBlocks": estimate, "dueAt": due,
             "inProgress": {"type": "boolean", "description": "Put it in the In Progress column."}}}},
-        {"name": "update_task", "description": "Edit a task: title, priority, estimate, column (inProgress) or archived.",
+        {"name": "update_task", "description": "Edit a task: title, priority, estimate, due date, column (inProgress) or archived.",
          "inputSchema": {"type": "object", "required": ["id"], "properties": {
-            "id": id, "title": {"type": "string"}, "priority": priority, "estimateBlocks": estimate,
+            "id": id, "title": {"type": "string"}, "priority": priority, "estimateBlocks": estimate, "dueAt": due,
             "inProgress": {"type": "boolean"}, "archived": {"type": "boolean"}}}},
         {"name": "set_task_done", "description": "Mark a task done or not done.",
          "inputSchema": {"type": "object", "required": ["id", "done"], "properties": {"id": id, "done": {"type": "boolean"}}}},
@@ -55,11 +57,81 @@ fn core(cmd: &str, mut args: Value) -> Result<Value, String> {
     }
 }
 
+/// Tasks as agents see them: `dueAtMs` plus a readable local `dueAt`.
+fn list() -> Result<Vec<Value>, String> {
+    let mut tasks = core("tasks.list", json!({}))?.as_array().cloned().unwrap_or_default();
+    for task in &mut tasks {
+        if let Some(ms) = task["dueAtMs"].as_u64() {
+            task["dueAt"] = json!(local_time(ms / 1000));
+        }
+    }
+    Ok(tasks)
+}
+
 fn find_task(id: &str) -> Result<Value, String> {
-    core("tasks.list", json!({}))?
-        .as_array()
-        .and_then(|tasks| tasks.iter().find(|task| task["id"] == id).cloned())
+    list()?
+        .into_iter()
+        .find(|task| task["id"] == id)
         .ok_or_else(|| "Task not found.".to_string())
+}
+
+/// Runs macOS `date`, which knows the user's time zone (including DST on that date).
+fn date(args: &[&str]) -> Option<String> {
+    let output = std::process::Command::new("/bin/date").args(args).output().ok()?;
+    output.status.success().then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn local_time(seconds: u64) -> String {
+    date(&["-r", &seconds.to_string(), "+%Y-%m-%dT%H:%M%z"]).unwrap_or_default()
+}
+
+/// "2026-11-14T15:30", "2026-11-14 15:30:00", "…Z", "…+01:00", or "2026-11-14" (23:59) → epoch ms.
+fn parse_due(text: &str) -> Result<u64, String> {
+    let invalid = || format!("Invalid dueAt \"{text}\". Use local time like 2026-11-14T15:30.");
+    let text = text.trim().replacen(' ', "T", 1);
+    let (body, offset_minutes) = if let Some(body) = text.strip_suffix('Z') {
+        (body.to_string(), Some(0i64))
+    } else if text.len() > 16 && matches!(text.as_bytes()[text.len() - 6], b'+' | b'-') {
+        let (body, offset) = text.split_at(text.len() - 6);
+        let sign = if offset.starts_with('-') { -1 } else { 1 };
+        let hours: i64 = offset[1..3].parse().map_err(|_| invalid())?;
+        let minutes: i64 = offset[4..6].parse().map_err(|_| invalid())?;
+        (body.to_string(), Some(sign * (hours * 60 + minutes)))
+    } else {
+        (text, None)
+    };
+    let body = match body.len() {
+        10 => format!("{body}T23:59:00"),
+        16 => format!("{body}:00"),
+        19 => body,
+        _ => return Err(invalid()),
+    };
+    // -u reads the wall time as UTC; the offset (if any) is then applied by hand.
+    let mut args = vec!["-j"];
+    if offset_minutes.is_some() {
+        args.push("-u");
+    }
+    args.extend(["-f", "%Y-%m-%dT%H:%M:%S", &body, "+%s"]);
+    let seconds: i64 = date(&args).and_then(|out| out.parse().ok()).ok_or_else(invalid)?;
+    // date -j silently rolls over impossible dates (Feb 30 → Mar 2); reject those.
+    let round_trip = date(&[if offset_minutes.is_some() { "-u" } else { "-j" }, "-r", &seconds.to_string(), "+%Y-%m-%dT%H:%M:%S"]);
+    if round_trip.as_deref() != Some(body.as_str()) {
+        return Err(invalid());
+    }
+    let seconds = seconds - offset_minutes.unwrap_or(0) * 60;
+    u64::try_from(seconds * 1000).map_err(|_| invalid())
+}
+
+/// Maps the agent-facing `dueAt` onto the core's `dueAtMs`.
+fn with_due(args: &Value, mut request: Value) -> Result<Value, String> {
+    match args.get("dueAt") {
+        None => {}
+        Some(Value::Null) => request["dueAtMs"] = Value::Null,
+        Some(Value::String(text)) if text.trim().is_empty() => request["dueAtMs"] = Value::Null,
+        Some(Value::String(text)) => request["dueAtMs"] = json!(parse_due(text)?),
+        Some(_) => return Err("dueAt must be a string like 2026-11-14T15:30.".into()),
+    }
+    Ok(request)
 }
 
 fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
@@ -76,26 +148,23 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
         "list_tasks" => {
             let archived = args["includeArchived"].as_bool().unwrap_or(false);
             let done = args["includeDone"].as_bool().unwrap_or(true);
-            let tasks = core("tasks.list", json!({}))?;
-            Ok(json!(tasks
-                .as_array()
+            Ok(json!(list()?
                 .into_iter()
-                .flatten()
                 .filter(|task| (archived || task["archived"] != true) && (done || task["done"] != true))
                 .collect::<Vec<_>>()))
         }
         "add_task" => {
-            let before = core("tasks.list", json!({}))?;
-            let after = core("tasks.add", pick(&["title", "priority", "estimateBlocks", "inProgress"]))?;
-            let known: Vec<&Value> = before.as_array().into_iter().flatten().map(|task| &task["id"]).collect();
-            after
-                .as_array()
-                .and_then(|tasks| tasks.iter().find(|task| !known.contains(&&task["id"])).cloned())
+            let request = with_due(args, pick(&["title", "priority", "estimateBlocks", "inProgress"]))?;
+            let known: Vec<Value> = list()?.into_iter().map(|task| task["id"].clone()).collect();
+            core("tasks.add", request)?;
+            list()?
+                .into_iter()
+                .find(|task| !known.contains(&task["id"]))
                 .ok_or_else(|| "Task was not added.".to_string())
         }
         "update_task" => {
             let id = args["id"].as_str().ok_or("A task id is required.")?;
-            core("tasks.update", pick(&["id", "title", "priority", "estimateBlocks", "inProgress", "archived"]))?;
+            core("tasks.update", with_due(args, pick(&["id", "title", "priority", "estimateBlocks", "inProgress", "archived"]))?)?;
             find_task(id)
         }
         "set_task_done" => {
@@ -173,6 +242,24 @@ fn state_path() -> String {
         let home = std::env::var("HOME").unwrap_or_default();
         format!("{home}/Library/Application Support/Cadence/core-state.json")
     })
+}
+
+#[cfg(all(test, target_os = "macos"))] // parse_due shells out to macOS /bin/date
+mod tests {
+    use super::*;
+
+    #[test]
+    fn due_times_parse_in_every_accepted_shape() {
+        assert_eq!(parse_due("2026-11-14T15:30Z").unwrap(), 1_794_670_200_000);
+        assert_eq!(parse_due("2026-11-14T16:30:00+01:00").unwrap(), 1_794_670_200_000);
+        assert_eq!(parse_due("2026-11-14T10:30-05:00").unwrap(), 1_794_670_200_000);
+        let local = parse_due("2026-11-14 15:30").unwrap();
+        assert_eq!(local_time(local / 1000)[..16], *"2026-11-14T15:30");
+        assert_eq!(local_time(parse_due("2026-11-14").unwrap() / 1000)[..16], *"2026-11-14T23:59");
+        for bad in ["tomorrow", "2026-02-30T10:00", "2026-11-14T25:00", "14/11/2026"] {
+            assert!(parse_due(bad).is_err(), "{bad}");
+        }
+    }
 }
 
 fn main() {

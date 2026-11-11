@@ -109,12 +109,12 @@ struct TasksView: View {
         .padding(.top, Theme.s(40))
         .padding(.bottom, Theme.s(22))
         .sheet(item: $editorMode) { mode in
-            TaskEditorView(mode: mode) { title, priority, estimate in
+            TaskEditorView(mode: mode) { title, priority, estimate, dueAtMs in
                 switch mode {
                 case .add:
-                    model.addTask(title: title, priority: priority, estimateBlocks: estimate)
+                    model.addTask(title: title, priority: priority, estimateBlocks: estimate, dueAtMs: dueAtMs)
                 case .edit(let task):
-                    model.updateTask(task, title: title, priority: priority, estimateBlocks: estimate)
+                    model.updateTask(task, title: title, priority: priority, estimateBlocks: estimate, dueAtMs: .some(dueAtMs))
                 }
             }
             .environmentObject(model)
@@ -461,6 +461,9 @@ private struct TaskCard: View {
                         .foregroundStyle(Theme.mutedDim.opacity(0.8))
                 }
                 Spacer()
+                if let due = task.dueDate {
+                    DueLabel(due: due, now: model.currentDate, done: task.done)
+                }
             }
         }
         .padding(Theme.s(9))
@@ -524,6 +527,42 @@ private struct TaskCard: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+    }
+}
+
+/// Deadline on a card: "Today 15:30", "Tomorrow 09:00", "Fri 14 Nov, 17:00". Red once overdue, amber when due today.
+private struct DueLabel: View {
+    let due: Date
+    let now: Date
+    let done: Bool
+
+    var body: some View {
+        Label(text, systemImage: overdue ? "exclamationmark.circle" : "calendar")
+            .font(Theme.font(8.5, .medium))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .help(due.formatted(date: .complete, time: .shortened))
+    }
+
+    private var overdue: Bool { !done && due < now }
+
+    private var tint: Color {
+        if done { return Theme.mutedDim }
+        if overdue { return Theme.danger }
+        return Calendar.current.isDate(due, inSameDayAs: now) ? Theme.amber : Theme.mutedDim
+    }
+
+    private var text: String {
+        let time = due.formatted(date: .omitted, time: .shortened)
+        let calendar = Calendar.current
+        if calendar.isDateInToday(due) { return "Today \(time)" }
+        if calendar.isDateInTomorrow(due) { return "Tomorrow \(time)" }
+        if calendar.isDateInYesterday(due) { return "Yesterday \(time)" }
+        let sameYear = calendar.isDate(due, equalTo: now, toGranularity: .year)
+        let day = sameYear
+            ? due.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+            : due.formatted(.dateTime.day().month(.abbreviated).year())
+        return "\(day), \(time)"
     }
 }
 
@@ -652,14 +691,17 @@ private struct TaskEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     let mode: TaskEditorMode
-    let onSave: (String, TaskPriority, Int) -> Void
+    /// title, priority, estimate, deadline (epoch ms, nil = none)
+    let onSave: (String, TaskPriority, Int, Int?) -> Void
 
     @State private var title: String
     @State private var priority: TaskPriority
     @State private var estimateBlocks: Int
+    @State private var hasDue: Bool
+    @State private var due: Date
     @FocusState private var titleFocused: Bool
 
-    init(mode: TaskEditorMode, onSave: @escaping (String, TaskPriority, Int) -> Void) {
+    init(mode: TaskEditorMode, onSave: @escaping (String, TaskPriority, Int, Int?) -> Void) {
         self.mode = mode
         self.onSave = onSave
         switch mode {
@@ -667,11 +709,25 @@ private struct TaskEditorView: View {
             _title = State(initialValue: "")
             _priority = State(initialValue: .medium)
             _estimateBlocks = State(initialValue: 1)
+            _hasDue = State(initialValue: false)
+            _due = State(initialValue: Self.defaultDue())
         case .edit(let task):
             _title = State(initialValue: task.title)
             _priority = State(initialValue: task.priority)
             _estimateBlocks = State(initialValue: task.estimateBlocks)
+            _hasDue = State(initialValue: task.dueDate != nil)
+            _due = State(initialValue: task.dueDate ?? Self.defaultDue())
         }
+    }
+
+    /// Today at 17:00, or tomorrow at 09:00 once that has passed.
+    private static func defaultDue() -> Date {
+        let calendar = Calendar.current
+        let now = Date()
+        let evening = calendar.date(bySettingHour: 17, minute: 0, second: 0, of: now) ?? now
+        if evening > now { return evening }
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
     }
 
     private var isEditing: Bool {
@@ -787,6 +843,27 @@ private struct TaskEditorView: View {
                 }
                 .padding(.top, Theme.s(18))
 
+                HStack(spacing: Theme.s(12)) {
+                    VStack(alignment: .leading, spacing: Theme.s(3)) {
+                        SectionLabel(text: "Deadline")
+                        Text(hasDue ? "Date and time it's due" : "Optional")
+                            .font(Theme.font(9, .medium))
+                            .foregroundStyle(Theme.mutedDim)
+                    }
+                    Spacer()
+                    if hasDue {
+                        DatePicker("Deadline", selection: $due, displayedComponents: [.date, .hourAndMinute])
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .fixedSize()
+                        MiniStepperButton(icon: "xmark", enabled: true) { hasDue = false }
+                            .help("Remove deadline")
+                    } else {
+                        QuietButton(title: "Add deadline") { hasDue = true }
+                    }
+                }
+                .padding(.top, Theme.s(18))
+
                 Spacer(minLength: 16)
 
                 HStack(spacing: Theme.s(9)) {
@@ -794,7 +871,8 @@ private struct TaskEditorView: View {
                     QuietButton(title: "Cancel") { dismiss() }
                     AccentButton(title: isEditing ? "Save task" : "Add task", icon: "checkmark") {
                         guard !trimmedTitle.isEmpty else { return }
-                        onSave(trimmedTitle, priority, estimateBlocks)
+                        let dueAtMs = hasDue ? Int((due.timeIntervalSince1970 * 1000).rounded()) : nil
+                        onSave(trimmedTitle, priority, estimateBlocks, dueAtMs)
                         dismiss()
                     }
                     .disabled(trimmedTitle.isEmpty)
@@ -803,7 +881,7 @@ private struct TaskEditorView: View {
             }
             .padding(Theme.s(24))
         }
-        .frame(width: 500, height: 420)
+        .frame(width: 500, height: 480)
         .preferredColorScheme(model.appearanceMode.colorScheme)
         .onAppear {
             titleFocused = true

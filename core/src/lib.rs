@@ -322,6 +322,7 @@ impl AppCore {
             .and_then(Value::as_u64)
             .unwrap_or(1)
             .clamp(1, 24) as u32;
+        let due_at_ms = parse_due_at(request)?.flatten();
         self.tasks.push(Task {
             id: new_id("task", now),
             title,
@@ -330,6 +331,7 @@ impl AppCore {
             created_at_ms: now,
             in_progress,
             position,
+            due_at_ms,
             ..Task::default()
         });
         self.save();
@@ -341,9 +343,13 @@ impl AppCore {
             .get("id")
             .and_then(Value::as_str)
             .ok_or_else(|| CoreFailure::new("bad_request", "A task id is required."))?;
+        let due_at_ms = parse_due_at(request)?;
         let Some(task) = self.tasks.iter_mut().find(|task| task.id == id) else {
             return Err(CoreFailure::new("not_found", "Task not found."));
         };
+        if let Some(due_at_ms) = due_at_ms {
+            task.due_at_ms = due_at_ms;
+        }
         if let Some(title) = request
             .get("title")
             .and_then(Value::as_str)
@@ -490,6 +496,18 @@ fn parse_priority(request: &Value) -> Option<Priority> {
         .get("priority")
         .cloned()
         .and_then(|value| serde_json::from_value(value).ok())
+}
+
+/// `dueAtMs`: absent → None (leave as is); null → Some(None) (clear); epoch ms → Some(Some(ms)).
+fn parse_due_at(request: &Value) -> Result<Option<Option<u64>>, CoreFailure> {
+    match request.get("dueAtMs") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(value) => value
+            .as_u64()
+            .map(|ms| Some(Some(ms)))
+            .ok_or_else(|| CoreFailure::new("bad_request", "dueAtMs must be epoch milliseconds or null.")),
+    }
 }
 
 #[derive(Debug)]
@@ -742,5 +760,22 @@ mod tests {
         let state = app.handle(json!({"cmd": "tick", "nowMs": 5})).unwrap();
         assert_eq!(state["externalRevision"], 1, "own writes are not external");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn due_date_is_set_validated_and_cleared() {
+        let due = 1_794_666_600_000u64;
+        let mut core = AppCore::new();
+        let added = core
+            .handle(json!({"cmd": "tasks.add", "title": "a", "dueAtMs": due, "nowMs": 1}))
+            .unwrap();
+        assert_eq!(added[0]["dueAtMs"], due);
+        let id = added[0]["id"].as_str().unwrap().to_string();
+
+        assert!(core.handle(json!({"cmd": "tasks.update", "id": id, "dueAtMs": "tomorrow"})).is_err());
+        let kept = core.handle(json!({"cmd": "tasks.update", "id": id, "title": "b"})).unwrap();
+        assert_eq!(kept[0]["dueAtMs"], due);
+        let cleared = core.handle(json!({"cmd": "tasks.update", "id": id, "dueAtMs": null})).unwrap();
+        assert!(cleared[0]["dueAtMs"].is_null());
     }
 }

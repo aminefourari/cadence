@@ -706,13 +706,20 @@ final class AppModel: ObservableObject {
         assignTask(nil)
     }
 
-    func addTask(title: String, priority: TaskPriority, estimateBlocks: Int, inProgress: Bool = false) {
+    func addTask(
+        title: String,
+        priority: TaskPriority,
+        estimateBlocks: Int,
+        inProgress: Bool = false,
+        dueAtMs: Int? = nil
+    ) {
         do {
             tasks = try CoreClient.shared.addTask(
                 title: title,
                 priority: priority,
                 estimateBlocks: estimateBlocks,
                 inProgress: inProgress,
+                dueAtMs: dueAtMs,
                 nowMs: CoreClient.nowMs(),
                 day: currentDay
             )
@@ -739,7 +746,8 @@ final class AppModel: ObservableObject {
         priority: TaskPriority? = nil,
         estimateBlocks: Int? = nil,
         inProgress: Bool? = nil,
-        archived: Bool? = nil
+        archived: Bool? = nil,
+        dueAtMs: Int?? = nil
     ) {
         do {
             tasks = try CoreClient.shared.updateTask(
@@ -749,6 +757,7 @@ final class AppModel: ObservableObject {
                 estimateBlocks: estimateBlocks,
                 inProgress: inProgress,
                 archived: archived,
+                dueAtMs: dueAtMs,
                 nowMs: CoreClient.nowMs(),
                 day: currentDay
             )
