@@ -109,6 +109,27 @@ struct CadenceApp: App {
     }
 }
 
+extension NSApplication {
+    /// AppKit refuses `terminate(_:)` while a sheet (Settings, task editor…) is attached,
+    /// before even asking the delegate. That silently broke "Restart & install", which is
+    /// clicked inside the Settings sheet. Dismiss sheets first, quit once they're gone.
+    func quitClosingSheets(attempt: Int = 0) {
+        let sheets = windows.compactMap(\.attachedSheet)
+        // A sheet detaches when its close animation ends; stop waiting after ~2 s.
+        guard !sheets.isEmpty, attempt < 40 else {
+            terminate(nil)
+            return
+        }
+        if attempt == 0 {
+            // SwiftUI owns its sheets: endSheet(_:) is ignored, but they dismiss on cancel (Esc).
+            sheets.forEach { $0.cancelOperation(nil) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            self.quitClosingSheets(attempt: attempt + 1)
+        }
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false

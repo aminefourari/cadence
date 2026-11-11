@@ -183,7 +183,7 @@ final class Updater: ObservableObject {
             try launchSwapHelper(relaunch: relaunch)
             state = .installing
             stagedApp = nil // the helper owns it now; don't install twice on quit
-            NSApp.terminate(nil)
+            NSApp.quitClosingSheets()
         } catch {
             state = .failed(error.localizedDescription)
         }

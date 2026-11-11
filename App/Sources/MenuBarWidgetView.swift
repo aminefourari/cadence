@@ -134,7 +134,7 @@ struct MenuBarWidgetView: View {
                 Spacer()
 
                 Button {
-                    NSApp.terminate(nil)
+                    NSApp.quitClosingSheets()
                 } label: {
                     Text("Quit")
                         .font(Theme.font(9, .medium))
