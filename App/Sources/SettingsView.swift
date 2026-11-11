@@ -175,9 +175,94 @@ struct SettingsView: View {
             }
         case .notifications:
             notificationsSection
+        case .agents:
+            agentsSection
         case .updates:
             updatesSection
         }
+    }
+
+    // MARK: - AI agents (MCP)
+
+    /// The MCP server shipped in the bundle (embedded by the "Embed cadence-mcp" build phase).
+    private var mcpPath: String {
+        Bundle.main.url(forAuxiliaryExecutable: "cadence-mcp")?.path
+            ?? "/Applications/Cadence.app/Contents/MacOS/cadence-mcp"
+    }
+
+    private var agentsSection: some View {
+        VStack(alignment: .leading, spacing: Theme.s(16)) {
+            Text("Cadence includes an MCP server, so any AI agent can add, edit and complete tasks, check the timer and start a focus block. Changes show up here instantly, and it works while Cadence is closed too. Register it once with each agent:")
+                .font(Theme.font(11, .medium))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            SettingsSection(title: "Claude Code · run in Terminal") {
+                snippet("claude mcp add --scope user cadence '\(mcpPath)'")
+            }
+            SettingsSection(title: "Codex · add to ~/.codex/config.toml") {
+                snippet("[mcp_servers.cadence]\ncommand = \"\(mcpPath)\"")
+            }
+            SettingsSection(title: "opencode · add to opencode.json") {
+                snippet("{\n  \"mcp\": {\n    \"cadence\": { \"type\": \"local\", \"command\": [\"\(mcpPath)\"] }\n  }\n}")
+            }
+            SettingsSection(title: "Any other MCP client · stdio command") {
+                snippet(mcpPath)
+            }
+            SettingsSection(title: "What agents can do") {
+                VStack(alignment: .leading, spacing: Theme.s(6)) {
+                    ForEach(Self.mcpTools, id: \.0) { name, caption in
+                        HStack(alignment: .firstTextBaseline, spacing: Theme.s(10)) {
+                            Text(name)
+                                .font(Theme.font(10.5, .medium, design: .monospaced))
+                                .foregroundStyle(Theme.cream)
+                                .frame(width: 120, alignment: .leading)
+                            Text(caption)
+                                .font(Theme.font(10.5, .medium))
+                                .foregroundStyle(Theme.muted)
+                        }
+                    }
+                }
+                .padding(Theme.s(14))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .panel(cornerRadius: Theme.radius(18))
+            }
+            Text("Keep Cadence in Applications: the path above moves with the app. Try it by asking your agent \"add a high-priority task to Cadence\".")
+                .font(Theme.font(9.5, .medium))
+                .foregroundStyle(Theme.mutedDim)
+                .padding(.horizontal, Theme.s(2))
+        }
+    }
+
+    private static let mcpTools: [(String, String)] = [
+        ("list_tasks", "Read the board, optionally with done or archived cards."),
+        ("add_task", "New card with priority, block estimate and column."),
+        ("update_task", "Rename, reprioritize, re-estimate, move or archive."),
+        ("set_task_done", "Complete a task or reopen it."),
+        ("delete_task", "Remove a task for good."),
+        ("timer_status", "Phase, time left, active task and today's stats."),
+        ("start_focus", "Start or resume focus, on a task, with an intention."),
+        ("pause_timer", "Pause the running interval."),
+        ("day_plan", "Time-box open tasks toward a daily target."),
+        ("list_sessions", "Recent completed focus blocks."),
+    ]
+
+    private func snippet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: Theme.s(12)) {
+            Text(text)
+                .font(Theme.font(10.5, .medium, design: .monospaced))
+                .foregroundStyle(Theme.cream)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            SmallSettingsButton(title: "Copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+                model.showToast("Copied", "Paste it into your agent's setup.", icon: "doc.on.doc.fill", tint: Theme.mint)
+            }
+        }
+        .padding(Theme.s(14))
+        .panel(cornerRadius: Theme.radius(18))
     }
 
     private var updatesSection: some View {

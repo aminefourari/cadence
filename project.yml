@@ -67,3 +67,17 @@ targets:
           # deployment floor and the app's own target handles the bundle.
           unset MACOSX_DEPLOYMENT_TARGET
           CARGO_HOME="$ROOT/.cargo-home" "$CARGO" build --release
+    postBuildScripts:
+      # Ships the MCP server for AI agents inside the app, signed like the app, so
+      # it reaches every user through the updater (Settings → AI Agents).
+      - name: Embed cadence-mcp
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          dest="$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/cadence-mcp"
+          cp "$PROJECT_DIR/core/target/release/cadence-mcp" "$dest"
+          if [ "${EXPANDED_CODE_SIGN_IDENTITY:--}" = "-" ]; then
+            codesign --force --sign - "$dest"
+          else
+            codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --options runtime --timestamp "$dest"
+          fi

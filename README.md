@@ -39,6 +39,27 @@ You can turn this off in **Preferences → Updates**, then install with **Restar
 
 Because every release carries the same signature, macOS keeps the permissions you granted (such as controlling Brave) across updates. Updating from 1.2.0 or earlier asks once more, since those builds were ad-hoc signed.
 
+## AI agents (MCP)
+
+`cadence-mcp` is a stdio [MCP](https://modelcontextprotocol.io) server, so any agent can manage your board: `list_tasks`, `add_task`, `update_task`, `set_task_done`, `delete_task`, `timer_status`, `start_focus`, `pause_timer`, `day_plan`, `list_sessions`.
+
+The server ships inside the app at `/Applications/Cadence.app/Contents/MacOS/cadence-mcp`, and **Preferences → AI Agents** has copy-ready setup for each agent. (From source: `make mcp` builds `core/target/release/cadence-mcp`.)
+
+Register it (use the absolute path to the binary):
+
+- **Claude Code:** `claude mcp add --scope user cadence /Applications/Cadence.app/Contents/MacOS/cadence-mcp`
+- **Codex** (`~/.codex/config.toml`):
+  ```toml
+  [mcp_servers.cadence]
+  command = "/Applications/Cadence.app/Contents/MacOS/cadence-mcp"
+  ```
+- **opencode** (`opencode.json`):
+  ```json
+  { "mcp": { "cadence": { "type": "local", "command": ["/Applications/Cadence.app/Contents/MacOS/cadence-mcp"] } } }
+  ```
+
+It works with the app open or closed: it uses the same Rust core and state file (set `CADENCE_STATE` to point elsewhere), and the open app shows changes within a quarter second.
+
 ## Requirements
 
 - macOS 14 or newer (Apple Silicon)

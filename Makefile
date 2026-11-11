@@ -7,7 +7,7 @@ RELEASE_APP := $(RELEASE_DERIVED)/Build/Products/Release/Cadence.app
 CARGO_HOME_DIR := $(CURDIR)/.cargo-home
 VERSION := $(shell sed -nE 's/.*MARKETING_VERSION: "([^"]*)".*/\1/p' project.yml)
 
-.PHONY: project build run release zip test clean icon
+.PHONY: project build run release zip test clean icon mcp
 
 project:
 	@if command -v xcodegen >/dev/null 2>&1; then \
@@ -44,6 +44,12 @@ test:
 	fi; \
 	mkdir -p "$(CARGO_HOME_DIR)"; \
 	cd core && unset MACOSX_DEPLOYMENT_TARGET && CARGO_HOME="$(CARGO_HOME_DIR)" "$$CARGO" test
+
+# MCP server for AI agents (Claude Code, Codex, opencode...). See README "AI agents (MCP)".
+mcp:
+	mkdir -p "$(CARGO_HOME_DIR)"
+	cd core && unset MACOSX_DEPLOYMENT_TARGET && CARGO_HOME="$(CARGO_HOME_DIR)" cargo build --release --bin cadence-mcp
+	@echo "Built $(CURDIR)/core/target/release/cadence-mcp"
 
 icon:
 	python3 scripts/generate_icon.py

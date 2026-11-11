@@ -129,6 +129,7 @@
 				4109B4344C0282863E7FC4F0 /* Build Rust core */,
 				1F5350DE3B53E65CAAF89D1D /* Sources */,
 				BFA5A0EE784FE6F59E5E0293 /* Resources */,
+				B97959C9A28CBF788825DEB7 /* Embed cadence-mcp */,
 			);
 			buildRules = (
 			);
@@ -205,6 +206,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -euo pipefail\nROOT=\"$PROJECT_DIR\"\nCARGO=\"/Users/amine/.cargo/bin/cargo\"\nif [ ! -x \"$CARGO\" ]; then\n  CARGO=\"$(command -v cargo || true)\"\nfi\nif [ -z \"$CARGO\" ] || [ ! -x \"$CARGO\" ]; then\n  echo \"error: Cargo was not found. Install Rust from https://rustup.rs to build Cadence.\" >&2\n  exit 1\nfi\nmkdir -p \"$ROOT/.cargo-home\"\ncd \"$ROOT/core\"\n# Xcode exports MACOSX_DEPLOYMENT_TARGET=14.0. On current Apple toolchains\n# that breaks proc-macro dylibs, so let Rust use its default (macOS 11)\n# deployment floor and the app's own target handles the bundle.\nunset MACOSX_DEPLOYMENT_TARGET\nCARGO_HOME=\"$ROOT/.cargo-home\" \"$CARGO\" build --release\n";
+		};
+		B97959C9A28CBF788825DEB7 /* Embed cadence-mcp */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed cadence-mcp";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\ndest=\"$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/cadence-mcp\"\ncp \"$PROJECT_DIR/core/target/release/cadence-mcp\" \"$dest\"\nif [ \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" = \"-\" ]; then\n  codesign --force --sign - \"$dest\"\nelse\n  codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --options runtime --timestamp \"$dest\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

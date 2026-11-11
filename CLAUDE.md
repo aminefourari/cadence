@@ -6,6 +6,7 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 
 - `make run` — build Debug (Xcode pre-build compiles the Rust core) and open the app
 - `make release` — Release build into `dist/Cadence.app`; `make zip` packages it
+- `make mcp` — build `core/target/release/cadence-mcp`, the stdio MCP server for AI agents (`core/src/bin/cadence-mcp.rs`; tools call `cadence_core::process_request`). The "Embed cadence-mcp" post-build phase in `project.yml` copies and signs it into `Cadence.app/Contents/MacOS/`; the Settings → AI Agents pane documents setup
 - `make test` — Rust unit tests (`core/`, uses `.cargo-home`)
 - `cd core && CARGO_HOME=../.cargo-home cargo test --offline` — same, without make
 - `scripts/release.sh <version>` — bump version, test, commit, tag, push; `.github/workflows/release.yml` builds on macOS and publishes the GitHub release (the in-app updater in `Updater.swift` reads releases from `CadenceUpdateRepository` in `App/Info.plist`)
@@ -28,6 +29,6 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 
 - Business logic lives in Rust; Swift renders state and sends intents. New commands: add to `AppCore::handle` + a `CoreClient` method.
 - JSON is camelCase (`#[serde(rename_all = "camelCase", default)]`); enums are snake_case.
-- Every core mutation calls `self.save()`.
+- Every core mutation calls `self.save()`. The state file is shared with `cadence-mcp`: `AppCore::handle` takes a file lock, reloads if the file's mtime changed, and bumps `externalRevision` so the app reloads tasks.
 - Errors surface in the UI via `AppModel.showToast(..., tint: Theme.amber)`.
 - Debug launch args: `--demo-data`, `--tab=`, `--theme=`, `--show-settings`, `--video=` etc. (see `AppModel.init`).

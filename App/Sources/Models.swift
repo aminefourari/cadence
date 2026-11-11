@@ -176,6 +176,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
     case automation
     case appearance
     case notifications
+    case agents
     case updates
 
     var id: String { rawValue }
@@ -186,6 +187,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
         case .automation: return "Automation"
         case .appearance: return "Appearance"
         case .notifications: return "Notifications"
+        case .agents: return "AI Agents"
         case .updates: return "Updates"
         }
     }
@@ -196,6 +198,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
         case .automation: return "What happens around a focus block."
         case .appearance: return "Theme, light or dark, and the scene behind everything."
         case .notifications: return "How Cadence tells you an interval ended."
+        case .agents: return "Let Claude Code, Codex or opencode manage your tasks over MCP."
         case .updates: return "New versions straight from GitHub."
         }
     }
@@ -206,6 +209,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
         case .automation: return "wand.and.stars"
         case .appearance: return "paintpalette.fill"
         case .notifications: return "bell.badge.fill"
+        case .agents: return "sparkles"
         case .updates: return "arrow.down.circle.fill"
         }
     }
@@ -293,6 +297,8 @@ struct TimerState: Codable {
     let activeTaskId: String?
     let intention: String?
     let transition: TimerTransition?
+    /// Changes when another process (cadence-mcp) edited the saved state.
+    var externalRevision: Int? = nil
 
     static let placeholder = TimerState(
         phase: .focus,
