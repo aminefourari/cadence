@@ -371,6 +371,11 @@ final class AppModel: ObservableObject {
         if wasFocusing != isFocusing {
             focusActivityChanged(isFocusing)
         }
+        if state.externalRevision != previousTimer.externalRevision {
+            reloadTasks()
+            reloadSessions()
+            refreshPlan()
+        }
         guard let transition = state.transition, transition.id > lastTransitionID else { return }
         lastTransitionID = transition.id
         if !transition.skipped {

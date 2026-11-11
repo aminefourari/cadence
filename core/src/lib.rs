@@ -3,6 +3,7 @@ mod tasks;
 mod timer;
 
 use std::ffi::{CStr, CString};
+use std::fs;
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
@@ -22,6 +23,10 @@ struct AppCore {
     tasks: Vec<Task>,
     sessions: Vec<FocusSession>,
     storage_path: Option<PathBuf>,
+    /// mtime of the state file as this process last wrote or read it.
+    disk_mtime: Option<SystemTime>,
+    /// Bumped when another process (e.g. `cadence-mcp`) changed the state file.
+    external_revision: u64,
 }
 
 impl AppCore {
@@ -32,15 +37,12 @@ impl AppCore {
             tasks: Vec::new(),
             sessions: Vec::new(),
             storage_path: None,
+            disk_mtime: None,
+            external_revision: 0,
         }
     }
 
     fn initialize(&mut self, request: &Value) -> Result<Value, CoreFailure> {
-        let day = request
-            .get("day")
-            .and_then(Value::as_str)
-            .unwrap_or("1970-01-01")
-            .to_string();
         let path = request
             .get("storagePath")
             .and_then(Value::as_str)
@@ -48,30 +50,16 @@ impl AppCore {
             .map(PathBuf::from);
 
         let now = now_ms(request);
-        if let Some(path) = &path {
-            if let Some(persisted) = storage::load(path, now) {
-                self.engine = PomodoroEngine::new(persisted.config);
-                if let Some(snapshot) = persisted.timer {
-                    self.engine.restore(snapshot);
-                }
-                self.stats = persisted.stats;
-                self.tasks = persisted.tasks;
-                self.sessions = persisted.sessions;
-                if let Some(active_id) = persisted.active_task_id {
-                    if self
-                        .tasks
-                        .iter()
-                        .any(|task| task.id == active_id && !task.done)
-                    {
-                        self.engine.set_active_task(Some(active_id));
-                    }
-                }
-            }
-        }
         self.storage_path = path;
-        self.stats.for_day(&day);
+        let _lock = self.lock_storage();
+        self.disk_mtime = None;
+        self.sync_from_disk(now);
+        // No day (e.g. cadence-mcp, which has no local calendar) keeps the saved day's stats.
+        if let Some(day) = request.get("day").and_then(Value::as_str) {
+            self.stats.for_day(day);
+        }
         self.save();
-        Ok(timer::to_value(self.engine.state(now, &self.stats)))
+        Ok(self.state_value(now))
     }
 
     fn handle(&mut self, request: Value) -> Result<Value, CoreFailure> {
@@ -86,6 +74,10 @@ impl AppCore {
         }
 
         let now = now_ms(&request);
+        let _lock = self.lock_storage();
+        if self.sync_from_disk(now) {
+            self.external_revision += 1;
+        }
         if let Some(day) = request.get("day").and_then(Value::as_str) {
             let before = self.stats.day.clone();
             self.stats.for_day(day);
@@ -97,7 +89,7 @@ impl AppCore {
         match command.as_str() {
             "tick" => {
                 self.tick_once(now);
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.start" => {
                 self.tick_once(now);
@@ -107,37 +99,37 @@ impl AppCore {
                     .map(str::to_string);
                 self.engine.start_with_intention(now, intention);
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.resume" => {
                 self.tick_once(now);
                 self.engine.start(now);
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.pause" => {
                 self.tick_once(now);
                 self.engine.pause(now);
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.toggle" => {
                 self.tick_once(now);
                 self.engine.toggle(now);
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.reset" => {
                 self.tick_once(now);
                 self.engine.reset();
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.skip" => {
                 self.tick_once(now);
                 self.engine.skip(now, &mut self.stats);
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.select" => {
                 self.tick_once(now);
@@ -151,7 +143,7 @@ impl AppCore {
                     })?;
                 self.engine.select_phase(phase);
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.setLength" => {
                 let minutes = request
@@ -161,7 +153,7 @@ impl AppCore {
                 self.tick_once(now);
                 self.engine.set_length(minutes.min(180) as u32);
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.configure" => {
                 let config = request
@@ -180,7 +172,7 @@ impl AppCore {
                     })?;
                 self.engine.configure(config);
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "timer.assignTask" => {
                 let task_id = request
@@ -201,7 +193,7 @@ impl AppCore {
                 }
                 self.engine.set_active_task(task_id);
                 self.save();
-                Ok(timer::to_value(self.engine.state(now, &self.stats)))
+                Ok(self.state_value(now))
             }
             "tasks.list" => Ok(json!(ordered_tasks(&self.tasks))),
             "sessions.list" => Ok(json!(self.sessions)),
@@ -217,6 +209,51 @@ impl AppCore {
                 format!("Unknown command: {command}"),
             )),
         }
+    }
+
+    fn state_value(&self, now: u64) -> Value {
+        let mut value = timer::to_value(self.engine.state(now, &self.stats));
+        value["externalRevision"] = json!(self.external_revision);
+        value
+    }
+
+    /// Exclusive lock shared by every process using the state file, held for one command.
+    fn lock_storage(&self) -> Option<fs::File> {
+        let path = self.storage_path.as_ref()?.with_extension("lock");
+        fs::create_dir_all(path.parent()?).ok()?;
+        let file = fs::OpenOptions::new().create(true).write(true).truncate(false).open(path).ok()?;
+        file.lock().ok()?;
+        Some(file)
+    }
+
+    fn file_mtime(&self) -> Option<SystemTime> {
+        fs::metadata(self.storage_path.as_ref()?).and_then(|meta| meta.modified()).ok()
+    }
+
+    /// Reloads state when the file changed since this process last touched it. Returns true on reload.
+    fn sync_from_disk(&mut self, now: u64) -> bool {
+        let mtime = self.file_mtime();
+        if mtime.is_none() || mtime == self.disk_mtime {
+            return false;
+        }
+        self.disk_mtime = mtime;
+        let Some(persisted) = self.storage_path.as_deref().and_then(|path| storage::load(path, now))
+        else {
+            return false;
+        };
+        self.engine = PomodoroEngine::new(persisted.config);
+        if let Some(snapshot) = persisted.timer {
+            self.engine.restore(snapshot);
+        }
+        self.stats = persisted.stats;
+        self.tasks = persisted.tasks;
+        self.sessions = persisted.sessions;
+        if let Some(active_id) = persisted.active_task_id {
+            if self.tasks.iter().any(|task| task.id == active_id && !task.done) {
+                self.engine.set_active_task(Some(active_id));
+            }
+        }
+        true
     }
 
     fn tick_once(&mut self, now: u64) {
@@ -429,7 +466,7 @@ impl AppCore {
             .map_err(|error| CoreFailure::new("serialization", error.to_string()))
     }
 
-    fn save(&self) {
+    fn save(&mut self) {
         let Some(path) = &self.storage_path else {
             return;
         };
@@ -444,6 +481,7 @@ impl AppCore {
         if let Err(error) = storage::save(path, &payload) {
             eprintln!("[cadence-core] {error}");
         }
+        self.disk_mtime = self.file_mtime();
     }
 }
 
@@ -504,7 +542,8 @@ fn response_error(code: &str, message: &str) -> String {
     json!({ "ok": false, "code": code, "error": message }).to_string()
 }
 
-fn process_request(raw: &str) -> String {
+/// The JSON command router behind the C ABI; `cadence-mcp` calls it directly.
+pub fn process_request(raw: &str) -> String {
     let request: Value = match serde_json::from_str(raw) {
         Ok(value) => value,
         Err(error) => return response_error("bad_json", &format!("Invalid request: {error}")),
@@ -579,7 +618,7 @@ mod tests {
             keys,
             [
                 "activeTaskId", "completedInCycle", "config", "cycleLength", "endsAtMs",
-                "intention", "phase", "remainingMs", "running", "todayFocusMinutes",
+                "externalRevision", "intention", "phase", "remainingMs", "running", "todayFocusMinutes",
                 "todaySessions", "totalMs", "totalSessions", "transition",
             ]
         );
@@ -680,5 +719,28 @@ mod tests {
             .unwrap();
         assert!(core.tasks.iter().find(|task| task.id == ids[0]).unwrap().archived);
         assert!(core.engine.active_task_id().is_none());
+    }
+
+    /// The app and cadence-mcp are separate processes on one state file; neither may lose
+    /// the other's writes, and the app must learn about external changes.
+    #[test]
+    fn two_cores_share_the_state_file() {
+        let dir = std::env::temp_dir().join(format!("cadence-sync-{}", std::process::id()));
+        let path = dir.join("core-state.json");
+        let init = json!({"cmd": "initialize", "storagePath": path.to_str().unwrap(), "day": "2026-11-11"});
+        let (mut app, mut mcp) = (AppCore::new(), AppCore::new());
+        app.handle(init.clone()).unwrap();
+        mcp.handle(init).unwrap();
+
+        mcp.handle(json!({"cmd": "tasks.add", "title": "from agent", "nowMs": 1})).unwrap();
+        let state = app.handle(json!({"cmd": "tick", "nowMs": 2})).unwrap();
+        assert_eq!(state["externalRevision"], 1);
+        app.handle(json!({"cmd": "tasks.add", "title": "from app", "nowMs": 3})).unwrap();
+
+        let tasks = mcp.handle(json!({"cmd": "tasks.list", "nowMs": 4})).unwrap();
+        assert_eq!(tasks.as_array().unwrap().len(), 2);
+        let state = app.handle(json!({"cmd": "tick", "nowMs": 5})).unwrap();
+        assert_eq!(state["externalRevision"], 1, "own writes are not external");
+        fs::remove_dir_all(&dir).unwrap();
     }
 }
