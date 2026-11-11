@@ -109,12 +109,12 @@ struct TasksView: View {
         .padding(.top, Theme.s(40))
         .padding(.bottom, Theme.s(22))
         .sheet(item: $editorMode) { mode in
-            TaskEditorView(mode: mode) { title, priority, estimate, dueAtMs in
+            TaskEditorView(mode: mode) { title, priority, minutes, dueAtMs in
                 switch mode {
                 case .add:
-                    model.addTask(title: title, priority: priority, estimateBlocks: estimate, dueAtMs: dueAtMs)
+                    model.addTask(title: title, priority: priority, estimateBlocks: 1, estimateMinutes: minutes, dueAtMs: dueAtMs)
                 case .edit(let task):
-                    model.updateTask(task, title: title, priority: priority, estimateBlocks: estimate, dueAtMs: .some(dueAtMs))
+                    model.updateTask(task, title: title, priority: priority, estimateMinutes: minutes, dueAtMs: .some(dueAtMs))
                 }
             }
             .environmentObject(model)
@@ -455,6 +455,8 @@ private struct TaskCard: View {
                 Label("\(task.completedBlocks)/\(task.estimateBlocks)", systemImage: "timer")
                     .font(Theme.font(8.5, .medium, design: .monospaced))
                     .foregroundStyle(Theme.mutedDim)
+                    .help(task.estimateMinutes.map { "Estimated \(formatDuration($0)), \(task.estimateBlocks) focus blocks" }
+                          ?? "\(task.estimateBlocks) focus blocks")
                 if task.focusedMinutes > 0 {
                     Text("\(task.focusedMinutes)m")
                         .font(Theme.font(8.5, .medium, design: .monospaced))
@@ -691,12 +693,13 @@ private struct TaskEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     let mode: TaskEditorMode
-    /// title, priority, estimate, deadline (epoch ms, nil = none)
+    /// title, priority, estimated minutes, deadline (epoch ms, nil = none)
     let onSave: (String, TaskPriority, Int, Int?) -> Void
 
     @State private var title: String
     @State private var priority: TaskPriority
-    @State private var estimateBlocks: Int
+    /// 0 until onAppear fills it in (it needs the focus length from the model).
+    @State private var estimateMinutes: Int
     @State private var hasDue: Bool
     @State private var due: Date
     @FocusState private var titleFocused: Bool
@@ -708,16 +711,27 @@ private struct TaskEditorView: View {
         case .add:
             _title = State(initialValue: "")
             _priority = State(initialValue: .medium)
-            _estimateBlocks = State(initialValue: 1)
+            _estimateMinutes = State(initialValue: 0)
             _hasDue = State(initialValue: false)
             _due = State(initialValue: Self.defaultDue())
         case .edit(let task):
             _title = State(initialValue: task.title)
             _priority = State(initialValue: task.priority)
-            _estimateBlocks = State(initialValue: task.estimateBlocks)
+            _estimateMinutes = State(initialValue: task.estimateMinutes ?? 0)
+            blocksWithoutMinutes = task.estimateBlocks
             _hasDue = State(initialValue: task.dueDate != nil)
             _due = State(initialValue: task.dueDate ?? Self.defaultDue())
         }
+    }
+
+    private var blocksWithoutMinutes = 1
+    private static let estimateStep = 15
+
+    private var focusMinutes: Int { max(1, model.timer.config.focusMinutes) }
+    private var maxEstimate: Int { 24 * focusMinutes }
+    /// Mirrors the core's `blocks_for`: rounded up, 1–24.
+    private var estimatedBlocks: Int {
+        min(24, max(1, (estimateMinutes + focusMinutes - 1) / focusMinutes))
     }
 
     /// Today at 17:00, or tomorrow at 09:00 once that has passed.
@@ -823,21 +837,22 @@ private struct TaskEditorView: View {
                 HStack(spacing: Theme.s(12)) {
                     VStack(alignment: .leading, spacing: Theme.s(3)) {
                         SectionLabel(text: "Estimate")
-                        Text("Each block is \(model.timer.config.focusMinutes) minutes")
+                        Text("\(estimatedBlocks) focus \(estimatedBlocks == 1 ? "block" : "blocks") of \(focusMinutes) min")
                             .font(Theme.font(9, .medium))
                             .foregroundStyle(Theme.mutedDim)
+                            .contentTransition(.numericText())
                     }
                     Spacer()
                     HStack(spacing: Theme.s(6)) {
-                        MiniStepperButton(icon: "minus", enabled: estimateBlocks > 1) {
-                            estimateBlocks = max(1, estimateBlocks - 1)
+                        MiniStepperButton(icon: "minus", enabled: estimateMinutes > Self.estimateStep) {
+                            estimateMinutes = max(Self.estimateStep, (estimateMinutes - 1) / Self.estimateStep * Self.estimateStep)
                         }
-                        Text("\(estimateBlocks) \(estimateBlocks == 1 ? "block" : "blocks")")
+                        Text(formatDuration(estimateMinutes))
                             .font(Theme.font(10.5, .semibold, design: .monospaced))
                             .foregroundStyle(Theme.cream)
                             .frame(width: 62)
-                        MiniStepperButton(icon: "plus", enabled: estimateBlocks < 24) {
-                            estimateBlocks = min(24, estimateBlocks + 1)
+                        MiniStepperButton(icon: "plus", enabled: estimateMinutes < maxEstimate) {
+                            estimateMinutes = min(maxEstimate, (estimateMinutes / Self.estimateStep + 1) * Self.estimateStep)
                         }
                     }
                 }
@@ -872,7 +887,7 @@ private struct TaskEditorView: View {
                     AccentButton(title: isEditing ? "Save task" : "Add task", icon: "checkmark") {
                         guard !trimmedTitle.isEmpty else { return }
                         let dueAtMs = hasDue ? Int((due.timeIntervalSince1970 * 1000).rounded()) : nil
-                        onSave(trimmedTitle, priority, estimateBlocks, dueAtMs)
+                        onSave(trimmedTitle, priority, estimateMinutes, dueAtMs)
                         dismiss()
                     }
                     .disabled(trimmedTitle.isEmpty)
@@ -885,6 +900,14 @@ private struct TaskEditorView: View {
         .preferredColorScheme(model.appearanceMode.colorScheme)
         .onAppear {
             titleFocused = true
+            if estimateMinutes == 0 { estimateMinutes = blocksWithoutMinutes * focusMinutes }
         }
     }
+}
+
+/// 90 → "1h 30m", 45 → "45m", 120 → "2h".
+func formatDuration(_ minutes: Int) -> String {
+    let hours = minutes / 60, rest = minutes % 60
+    if hours == 0 { return "\(rest)m" }
+    return rest == 0 ? "\(hours)h" : "\(hours)h \(rest)m"
 }

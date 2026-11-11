@@ -236,7 +236,7 @@ struct SettingsView: View {
 
     private static let mcpTools: [(String, String)] = [
         ("list_tasks", "Read the board, optionally with done or archived cards."),
-        ("add_task", "New card with priority, estimate, deadline and column."),
+        ("add_task", "New card with priority, time estimate (split into blocks), deadline and column."),
         ("update_task", "Rename, reprioritize, re-estimate, reschedule, move or archive."),
         ("set_task_done", "Complete a task or reopen it."),
         ("delete_task", "Remove a task for good."),

@@ -711,6 +711,7 @@ final class AppModel: ObservableObject {
         priority: TaskPriority,
         estimateBlocks: Int,
         inProgress: Bool = false,
+        estimateMinutes: Int? = nil,
         dueAtMs: Int? = nil
     ) {
         do {
@@ -719,6 +720,7 @@ final class AppModel: ObservableObject {
                 priority: priority,
                 estimateBlocks: estimateBlocks,
                 inProgress: inProgress,
+                estimateMinutes: estimateMinutes,
                 dueAtMs: dueAtMs,
                 nowMs: CoreClient.nowMs(),
                 day: currentDay
@@ -747,6 +749,7 @@ final class AppModel: ObservableObject {
         estimateBlocks: Int? = nil,
         inProgress: Bool? = nil,
         archived: Bool? = nil,
+        estimateMinutes: Int? = nil,
         dueAtMs: Int?? = nil
     ) {
         do {
@@ -757,6 +760,7 @@ final class AppModel: ObservableObject {
                 estimateBlocks: estimateBlocks,
                 inProgress: inProgress,
                 archived: archived,
+                estimateMinutes: estimateMinutes,
                 dueAtMs: dueAtMs,
                 nowMs: CoreClient.nowMs(),
                 day: currentDay

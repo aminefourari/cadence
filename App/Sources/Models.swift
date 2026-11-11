@@ -408,6 +408,8 @@ struct TaskItem: Codable, Identifiable, Equatable {
     var position: Int
     /// Deadline (date and time), epoch milliseconds.
     var dueAtMs: Int?
+    /// Time estimate in minutes, when given that way; the core derives `estimateBlocks` from it.
+    var estimateMinutes: Int?
 
     var dueDate: Date? {
         dueAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000) }

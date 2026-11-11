@@ -16,17 +16,19 @@ fn tools() -> Value {
     let due = json!({"type": ["string", "null"],
         "description": "Deadline in local time, e.g. 2026-11-14T15:30 (an offset like +01:00 or Z is also accepted; a bare date means 23:59 that day). In update_task, null or \"\" clears it."});
     let estimate = json!({"type": "integer", "minimum": 1, "maximum": 24,
-        "description": "Estimated focus blocks (Pomodoros)."});
+        "description": "Estimated focus blocks (Pomodoros). Prefer estimateMinutes."});
+    let minutes = json!({"type": "integer", "minimum": 1, "maximum": 1440,
+        "description": "Estimated time in minutes; Cadence splits it into focus blocks (rounded up) and re-splits if the focus length changes."});
     json!([
         {"name": "list_tasks", "description": "List tasks on the Cadence board (open first, then by priority). Archived tasks are hidden unless includeArchived.",
          "inputSchema": {"type": "object", "properties": {"includeArchived": {"type": "boolean"}, "includeDone": {"type": "boolean", "description": "Default true."}}}},
         {"name": "add_task", "description": "Add a task to the Cadence board.",
          "inputSchema": {"type": "object", "required": ["title"], "properties": {
-            "title": {"type": "string"}, "priority": priority, "estimateBlocks": estimate, "dueAt": due,
+            "title": {"type": "string"}, "priority": priority, "estimateMinutes": minutes, "estimateBlocks": estimate, "dueAt": due,
             "inProgress": {"type": "boolean", "description": "Put it in the In Progress column."}}}},
         {"name": "update_task", "description": "Edit a task: title, priority, estimate, due date, column (inProgress) or archived.",
          "inputSchema": {"type": "object", "required": ["id"], "properties": {
-            "id": id, "title": {"type": "string"}, "priority": priority, "estimateBlocks": estimate, "dueAt": due,
+            "id": id, "title": {"type": "string"}, "priority": priority, "estimateMinutes": minutes, "estimateBlocks": estimate, "dueAt": due,
             "inProgress": {"type": "boolean"}, "archived": {"type": "boolean"}}}},
         {"name": "set_task_done", "description": "Mark a task done or not done.",
          "inputSchema": {"type": "object", "required": ["id", "done"], "properties": {"id": id, "done": {"type": "boolean"}}}},
@@ -154,7 +156,7 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
                 .collect::<Vec<_>>()))
         }
         "add_task" => {
-            let request = with_due(args, pick(&["title", "priority", "estimateBlocks", "inProgress"]))?;
+            let request = with_due(args, pick(&["title", "priority", "estimateMinutes", "estimateBlocks", "inProgress"]))?;
             let known: Vec<Value> = list()?.into_iter().map(|task| task["id"].clone()).collect();
             core("tasks.add", request)?;
             list()?
@@ -164,7 +166,7 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
         }
         "update_task" => {
             let id = args["id"].as_str().ok_or("A task id is required.")?;
-            core("tasks.update", with_due(args, pick(&["id", "title", "priority", "estimateBlocks", "inProgress", "archived"]))?)?;
+            core("tasks.update", with_due(args, pick(&["id", "title", "priority", "estimateMinutes", "estimateBlocks", "inProgress", "archived"]))?)?;
             find_task(id)
         }
         "set_task_done" => {
