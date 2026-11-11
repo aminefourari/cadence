@@ -449,6 +449,8 @@ struct PlanBlock: Codable, Identifiable, Equatable {
     let startAtMs: Int
     let endAtMs: Int
     let minutes: Int
+    /// A focus block that ends after its task's deadline.
+    let late: Bool
 
     var startDate: Date { Date(timeIntervalSince1970: Double(startAtMs) / 1000) }
     var endDate: Date { Date(timeIntervalSince1970: Double(endAtMs) / 1000) }
@@ -456,7 +458,10 @@ struct PlanBlock: Codable, Identifiable, Equatable {
 
 struct DayPlan: Codable, Equatable {
     let blocks: [PlanBlock]
+    /// Minutes planned from here on.
     let focusMinutes: Int
+    /// Focus already done today (including a running block).
+    let doneMinutes: Int
     let targetMinutes: Int
     let startAtMs: Int
     let endAtMs: Int
@@ -464,6 +469,7 @@ struct DayPlan: Codable, Equatable {
     static let empty = DayPlan(
         blocks: [],
         focusMinutes: 0,
+        doneMinutes: 0,
         targetMinutes: 0,
         startAtMs: 0,
         endAtMs: 0

@@ -40,8 +40,8 @@ fn tools() -> Value {
          "inputSchema": {"type": "object", "properties": {"taskId": id, "intention": {"type": "string"}}}},
         {"name": "pause_timer", "description": "Pause the running timer.",
          "inputSchema": {"type": "object", "properties": {}}},
-        {"name": "day_plan", "description": "Time-box open tasks into focus blocks and breaks toward a daily target.",
-         "inputSchema": {"type": "object", "properties": {"targetMinutes": {"type": "integer", "description": "Default 240."}}}},
+        {"name": "day_plan", "description": "Time-box open tasks into focus blocks and breaks toward the daily focus target: earliest deadline first, then undated tasks by priority. Starts after a running interval, counts focus already done today (doneMinutes), and flags focus blocks that end after their task's deadline (late).",
+         "inputSchema": {"type": "object", "properties": {"targetMinutes": {"type": "integer", "description": "Daily focus target. Default: the target set in the app."}}}},
         {"name": "list_sessions", "description": "Completed focus sessions (most recent last).",
          "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "Default 20."}}}}
     ])
@@ -75,6 +75,14 @@ fn find_task(id: &str) -> Result<Value, String> {
         .into_iter()
         .find(|task| task["id"] == id)
         .ok_or_else(|| "Task not found.".to_string())
+}
+
+fn defaults_int(key: &str) -> Option<u64> {
+    let output = std::process::Command::new("/usr/bin/defaults")
+        .args(["read", "com.amine.cadence", key])
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&output.stdout).trim().parse().ok()
 }
 
 /// Runs macOS `date`, which knows the user's time zone (including DST on that date).
@@ -199,7 +207,16 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             }
         }
         "pause_timer" => core("timer.pause", json!({})),
-        "day_plan" => core("plan.build", pick(&["targetMinutes"])),
+        "day_plan" => {
+            let mut request = pick(&["targetMinutes"]);
+            if request.get("targetMinutes").is_none() {
+                // The app keeps the daily target in its preferences, not in the core.
+                if let Some(target) = defaults_int("cadence.dailyTargetMinutes") {
+                    request["targetMinutes"] = json!(target);
+                }
+            }
+            core("plan.build", request)
+        }
         "list_sessions" => {
             let limit = args["limit"].as_u64().unwrap_or(20) as usize;
             let sessions = core("sessions.list", json!({}))?;

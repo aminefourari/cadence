@@ -111,16 +111,35 @@ pub struct PlanBlock {
     pub start_at_ms: u64,
     pub end_at_ms: u64,
     pub minutes: u32,
+    /// A focus block that ends after its task's deadline.
+    pub late: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DayPlan {
     pub blocks: Vec<PlanBlock>,
+    /// Minutes planned from here on.
     pub focus_minutes: u32,
+    /// Focus already done today (including a running block), counted toward the target.
+    pub done_minutes: u32,
     pub target_minutes: u32,
     pub start_at_ms: u64,
     pub end_at_ms: u64,
+}
+
+/// Where the plan picks up from the timer.
+#[derive(Clone, Debug, Default)]
+pub struct PlanStart {
+    /// Now, or the end of the running interval.
+    pub at_ms: u64,
+    pub done_minutes: u32,
+    /// Focus blocks finished in the current cycle (decides short vs long breaks).
+    pub completed_in_cycle: u32,
+    /// The plan starts right after a focus block, so it opens with a break.
+    pub after_focus: bool,
+    /// Task of the running focus block; that block is already under way.
+    pub running_task_id: Option<String>,
 }
 
 pub fn ordered_tasks(tasks: &[Task]) -> Vec<Task> {
@@ -129,93 +148,96 @@ pub fn ordered_tasks(tasks: &[Task]) -> Vec<Task> {
     ordered
 }
 
+/// Time-boxes open tasks into focus blocks and breaks until the day's target is met.
+/// Order: earliest deadline first, then undated tasks by priority.
 pub fn build_plan(
     tasks: &[Task],
     config: &PomodoroConfig,
-    now_ms: u64,
+    start: &PlanStart,
     target_minutes: u32,
     buffer_minutes: u32,
 ) -> DayPlan {
     let step_ms = 5 * 60_000u64;
-    let mut cursor = if now_ms % step_ms == 0 {
-        now_ms
-    } else {
-        (now_ms / step_ms + 1) * step_ms
-    };
+    let mut cursor = start.at_ms.div_ceil(step_ms) * step_ms;
     let plan_start = cursor;
     let target_minutes = target_minutes.min(24 * 60);
+    let budget = target_minutes.saturating_sub(start.done_minutes);
     let buffer_ms = buffer_minutes.min(60) as u64 * 60_000;
+    let focus_minutes_each = config.focus_minutes.max(1);
 
-    let mut ordered = ordered_tasks(tasks)
-        .into_iter()
-        .filter(|task| !task.done && !task.archived && task.remaining_blocks() > 0)
+    let mut ordered = tasks
+        .iter()
+        .filter(|task| !task.done && !task.archived)
         .collect::<Vec<_>>();
     ordered.sort_by_key(|task| {
-        (task.priority.rank(), !task.in_progress, task.position, task.created_at_ms)
+        (
+            task.due_at_ms.is_none(),
+            task.due_at_ms.unwrap_or(u64::MAX),
+            task.priority.rank(),
+            !task.in_progress,
+            task.position,
+            task.created_at_ms,
+        )
+    });
+    let slots = ordered.into_iter().flat_map(|task| {
+        let mut remaining = task.remaining_blocks();
+        if start.running_task_id.as_ref() == Some(&task.id) {
+            remaining = remaining.saturating_sub(1);
+        }
+        std::iter::repeat_n(task, remaining as usize)
     });
 
-    let total_blocks = ordered
-        .iter()
-        .map(|task| task.remaining_blocks() as u64)
-        .sum::<u64>();
-    let mut scheduled_blocks = 0u64;
-    let mut focus_minutes = 0u32;
     let mut blocks: Vec<PlanBlock> = Vec::new();
-    let mut break_index = 0u32;
-    let focus_length = config.focus_minutes.max(1) as u64;
-
-    'tasks: for task in &ordered {
-        for _ in 0..task.remaining_blocks() {
-            if focus_minutes > 0 && focus_minutes + config.focus_minutes > target_minutes {
-                break 'tasks;
-            }
-
-            let focus_start = cursor;
-            let focus_end = focus_start + focus_length * 60_000;
-            blocks.push(PlanBlock {
-                id: format!("focus-{}", blocks.len() + 1),
-                kind: "focus".into(),
-                task_id: Some(task.id.clone()),
-                task_title: Some(task.title.clone()),
-                priority: Some(task.priority),
-                start_at_ms: focus_start,
-                end_at_ms: focus_end,
-                minutes: config.focus_minutes,
-            });
-            cursor = focus_end;
-            focus_minutes = focus_minutes.saturating_add(config.focus_minutes);
-            scheduled_blocks += 1;
-            break_index += 1;
-
-            if focus_minutes >= target_minutes || scheduled_blocks >= total_blocks {
-                break 'tasks;
-            }
-
-            cursor = cursor.saturating_add(buffer_ms);
-            let (kind, minutes) = if break_index % config.sessions_before_long_break.max(1) == 0 {
+    let mut planned = 0u32;
+    let mut cycle = start.completed_in_cycle;
+    let mut needs_break = start.after_focus;
+    for task in slots {
+        if planned + focus_minutes_each > budget {
+            break;
+        }
+        if needs_break {
+            cursor += buffer_ms;
+            let (kind, minutes) = if cycle > 0 && cycle % config.sessions_before_long_break.max(1) == 0 {
                 ("long_break", config.long_break_minutes)
             } else {
                 ("short_break", config.short_break_minutes)
             };
-            let break_start = cursor;
-            let break_end = break_start + minutes as u64 * 60_000;
+            let end = cursor + minutes as u64 * 60_000;
             blocks.push(PlanBlock {
                 id: format!("break-{}", blocks.len() + 1),
                 kind: kind.into(),
                 task_id: None,
                 task_title: None,
                 priority: None,
-                start_at_ms: break_start,
-                end_at_ms: break_end,
+                start_at_ms: cursor,
+                end_at_ms: end,
                 minutes,
+                late: false,
             });
-            cursor = break_end;
+            cursor = end;
         }
+        let end = cursor + focus_minutes_each as u64 * 60_000;
+        blocks.push(PlanBlock {
+            id: format!("focus-{}", blocks.len() + 1),
+            kind: "focus".into(),
+            task_id: Some(task.id.clone()),
+            task_title: Some(task.title.clone()),
+            priority: Some(task.priority),
+            start_at_ms: cursor,
+            end_at_ms: end,
+            minutes: focus_minutes_each,
+            late: task.due_at_ms.is_some_and(|due| end > due),
+        });
+        cursor = end;
+        planned += focus_minutes_each;
+        cycle += 1;
+        needs_break = true;
     }
 
     DayPlan {
         blocks,
-        focus_minutes,
+        focus_minutes: planned,
+        done_minutes: start.done_minutes,
         target_minutes,
         start_at_ms: plan_start,
         end_at_ms: cursor,
@@ -244,7 +266,7 @@ mod tests {
             task("now", 2, Priority::High),
         ];
         let config = PomodoroConfig::default();
-        let plan = build_plan(&tasks, &config, 0, 100, 5);
+        let plan = build_plan(&tasks, &config, &PlanStart::default(), 100, 5);
         assert_eq!(plan.blocks[0].task_id.as_deref(), Some("now"));
         assert_eq!(plan.blocks[0].kind, "focus");
         assert_eq!(plan.blocks[1].kind, "short_break");
@@ -255,7 +277,7 @@ mod tests {
     fn long_break_after_four_focus_blocks() {
         let tasks = vec![task("deep", 5, Priority::High)];
         let config = PomodoroConfig::default();
-        let plan = build_plan(&tasks, &config, 0, 180, 0);
+        let plan = build_plan(&tasks, &config, &PlanStart::default(), 180, 0);
         let kinds: Vec<&str> = plan
             .blocks
             .iter()
@@ -269,7 +291,7 @@ mod tests {
         let mut archived = task("archived", 2, Priority::High);
         archived.archived = true;
         let tasks = vec![archived, task("kept", 1, Priority::Low)];
-        let plan = build_plan(&tasks, &PomodoroConfig::default(), 0, 100, 5);
+        let plan = build_plan(&tasks, &PomodoroConfig::default(), &PlanStart::default(), 100, 5);
         assert!(plan.blocks.iter().all(|block| block.task_id.as_deref() != Some("archived")));
     }
 
@@ -282,5 +304,49 @@ mod tests {
         let session: FocusSession =
             serde_json::from_str(r#"{"id":"s","quadrant":"urgent_not_important"}"#).unwrap();
         assert_eq!(session.priority, Some(Priority::Medium));
+    }
+
+    const MIN: u64 = 60_000;
+
+    #[test]
+    fn deadlines_come_first_and_misses_are_flagged() {
+        let mut later = task("later", 1, Priority::High);
+        later.due_at_ms = Some(600 * MIN);
+        let mut soon = task("soon", 2, Priority::Low);
+        soon.due_at_ms = Some(40 * MIN);
+        let undated = task("undated", 1, Priority::High);
+        let tasks = vec![undated, later, soon];
+        let plan = build_plan(&tasks, &PomodoroConfig::default(), &PlanStart::default(), 600, 0);
+        let order: Vec<_> = plan.blocks.iter().filter_map(|b| b.task_id.as_deref()).collect();
+        assert_eq!(order, ["soon", "soon", "later", "undated"]);
+        // soon: 0–25 on time, second block 30–55 ends after its 40-minute deadline.
+        assert!(!plan.blocks[0].late);
+        assert!(plan.blocks[2].late);
+    }
+
+    #[test]
+    fn never_ends_on_a_break_and_counts_focus_already_done() {
+        let tasks = vec![task("a", 10, Priority::High)];
+        let start = PlanStart { done_minutes: 50, ..PlanStart::default() };
+        let plan = build_plan(&tasks, &PomodoroConfig::default(), &start, 120, 5);
+        assert_eq!(plan.focus_minutes, 50, "120 target - 50 done leaves room for 2 blocks");
+        assert_eq!(plan.blocks.last().unwrap().kind, "focus");
+        assert_eq!(plan.blocks.len(), 3);
+    }
+
+    #[test]
+    fn a_running_block_is_not_planned_twice() {
+        let tasks = vec![task("a", 2, Priority::High)];
+        let start = PlanStart {
+            at_ms: 20 * MIN,
+            after_focus: true,
+            completed_in_cycle: 4,
+            running_task_id: Some("a".into()),
+            ..PlanStart::default()
+        };
+        let plan = build_plan(&tasks, &PomodoroConfig::default(), &start, 600, 0);
+        let kinds: Vec<_> = plan.blocks.iter().map(|b| b.kind.as_str()).collect();
+        assert_eq!(kinds, ["long_break", "focus"], "opens with the break after the running 4th block");
+        assert_eq!(plan.blocks[0].start_at_ms, 20 * MIN);
     }
 }

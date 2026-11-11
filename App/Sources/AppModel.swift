@@ -356,7 +356,8 @@ final class AppModel: ObservableObject {
             coreError = error.localizedDescription
         }
 
-        if selectedTab == .tasks, Date().timeIntervalSince(lastPlanRefresh) > 60 {
+        // The plan's start time moves with the clock; it shows on the Focus screen.
+        if Date().timeIntervalSince(lastPlanRefresh) > 60 {
             refreshPlan()
         }
     }
@@ -370,6 +371,10 @@ final class AppModel: ObservableObject {
         let isFocusing = state.running && state.phase == .focus
         if wasFocusing != isFocusing {
             focusActivityChanged(isFocusing)
+        }
+        // Starting, pausing or a phase change moves where the plan begins.
+        if state.running != previousTimer.running || state.phase != previousTimer.phase {
+            refreshPlan()
         }
         if state.externalRevision != previousTimer.externalRevision {
             reloadTasks()
