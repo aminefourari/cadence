@@ -243,8 +243,13 @@ struct SettingsView: View {
         ("timer_status", "Phase, time left, active task and today's stats."),
         ("start_focus", "Start or resume focus, on a task, with an intention."),
         ("pause_timer", "Pause the running interval."),
-        ("day_plan", "Time-box open tasks toward a daily target."),
+        ("skip_interval", "End the current interval and move to the next."),
+        ("reset_timer", "Restart the current interval at full length."),
+        ("set_interval_length", "One-off length for the next interval."),
+        ("reorder_tasks", "Set the board's manual order."),
+        ("day_plan", "Time-box open tasks toward your daily target."),
         ("list_sessions", "Recent completed focus blocks."),
+        ("focus_summary", "Focused minutes per day and per task."),
     ]
 
     private func snippet(_ text: String) -> some View {

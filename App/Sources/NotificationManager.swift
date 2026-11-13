@@ -1,6 +1,13 @@
 import Foundation
 import UserNotifications
 
+struct DeadlineReminder {
+    let id: String
+    let fireAt: Date
+    let title: String
+    let body: String
+}
+
 final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
 
@@ -72,6 +79,33 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     func cancelPhaseEnd() {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: [Self.phaseEndID])
+    }
+
+    private static let deadlinePrefix = "cadence.due."
+
+    /// Replaces every pending deadline reminder with `reminders`.
+    func replaceDeadlineReminders(_ reminders: [DeadlineReminder]) {
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { pending in
+            let stale = pending.map(\.identifier).filter { $0.hasPrefix(Self.deadlinePrefix) }
+            center.removePendingNotificationRequests(withIdentifiers: stale)
+            for reminder in reminders {
+                let content = UNMutableNotificationContent()
+                content.title = reminder.title
+                content.body = reminder.body
+                content.sound = .default
+                // A calendar trigger fires at the wall-clock time even across sleep.
+                let when = Calendar.current.dateComponents(
+                    [.year, .month, .day, .hour, .minute, .second],
+                    from: reminder.fireAt
+                )
+                center.add(UNNotificationRequest(
+                    identifier: Self.deadlinePrefix + reminder.id,
+                    content: content,
+                    trigger: UNCalendarNotificationTrigger(dateMatching: when, repeats: false)
+                ))
+            }
+        }
     }
 
     func userNotificationCenter(

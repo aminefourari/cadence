@@ -9,8 +9,10 @@ struct CadenceApp: App {
 
     init() {
         let player = YouTubePlayerController()
+        // Built now, not lazily on first render: App Intents need AppModel.shared at launch.
+        let model = AppModel(player: player)
         _player = StateObject(wrappedValue: player)
-        _model = StateObject(wrappedValue: AppModel(player: player))
+        _model = StateObject(wrappedValue: model)
     }
 
     var body: some Scene {

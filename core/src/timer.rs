@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -28,6 +28,9 @@ pub struct PomodoroConfig {
     pub long_break_minutes: u32,
     pub sessions_before_long_break: u32,
     pub auto_start_next: bool,
+    /// Fields written by a newer Cadence; kept so an older process never erases them.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for PomodoroConfig {
@@ -38,6 +41,7 @@ impl Default for PomodoroConfig {
             long_break_minutes: 15,
             sessions_before_long_break: 4,
             auto_start_next: false,
+            extra: Map::new(),
         }
     }
 }
@@ -94,6 +98,8 @@ pub struct EngineSnapshot {
     pub intention: Option<String>,
     #[serde(default)]
     pub length_override_ms: Option<u64>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 pub fn to_value(state: TimerState) -> Value {
@@ -113,6 +119,8 @@ pub struct PomodoroEngine {
     intention: Option<String>,
     /// One-off length for the current interval; cleared when the interval ends.
     length_override_ms: Option<u64>,
+    /// Unknown snapshot fields from a newer Cadence, written back unchanged.
+    snapshot_extra: Map<String, Value>,
 }
 
 impl PomodoroEngine {
@@ -131,7 +139,15 @@ impl PomodoroEngine {
             active_task_id: None,
             intention: None,
             length_override_ms: None,
+            snapshot_extra: Map::new(),
         }
+    }
+
+    /// Keeps transition ids increasing across a reload from disk. The app remembers the
+    /// last id it handled; restarting at 0 would hide the next completions from it.
+    pub fn continue_transitions_from(&mut self, previous: &PomodoroEngine) {
+        self.transition_counter = previous.transition_counter;
+        self.last_transition = previous.last_transition.clone();
     }
 
     /// Length of the current interval: the one-off override, or the configured phase length.
@@ -171,6 +187,7 @@ impl PomodoroEngine {
             completed_in_cycle: self.completed_in_cycle,
             intention: self.intention.clone(),
             length_override_ms: self.length_override_ms,
+            extra: self.snapshot_extra.clone(),
         }
     }
 
@@ -187,6 +204,7 @@ impl PomodoroEngine {
         self.intention = snapshot.intention;
         self.ends_at_ms = snapshot.ends_at_ms.filter(|_| snapshot.running);
         self.running = self.ends_at_ms.is_some();
+        self.snapshot_extra = snapshot.extra;
     }
 
     pub fn start(&mut self, now_ms: u64) {
@@ -265,6 +283,11 @@ impl PomodoroEngine {
     pub fn configure(&mut self, config: PomodoroConfig) {
         let current_total = self.total_ms();
         let untouched = !self.running && self.remaining_ms == current_total && self.length_override_ms.is_none();
+        let mut config = config;
+        if config.extra.is_empty() {
+            // The app sends only the fields it knows; keep newer ones it didn't send.
+            config.extra = std::mem::take(&mut self.config.extra);
+        }
         self.config = config.normalized();
         self.completed_in_cycle = self
             .completed_in_cycle

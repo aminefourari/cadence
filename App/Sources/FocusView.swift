@@ -155,7 +155,8 @@ struct TimerDial: View {
                 .frame(width: ringSize, height: ringSize)
                 .rotationEffect(.degrees(-90))
                 .shadow(color: color.opacity(0.45), radius: 8)
-                .animation(.linear(duration: 0.25), value: timer.remainingFraction)
+                // The timer publishes once a second; glide across the whole second.
+                .animation(.linear(duration: 1), value: timer.remainingFraction)
 
             Circle()
                 .trim(from: 0, to: 0.0025)
@@ -481,6 +482,10 @@ private struct PlanPanel: View {
                 MiniStepperButton(icon: "plus", enabled: model.dailyTargetMinutes < 720) {
                     model.adjustDailyTarget(byMinutes: 30)
                 }
+                MiniStepperButton(icon: "calendar.badge.plus", enabled: !model.plan.blocks.isEmpty) {
+                    model.exportPlanToCalendar()
+                }
+                .help("Add the plan's focus blocks to Calendar")
             }
             .padding(.top, Theme.s(7))
 

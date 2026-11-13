@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use crate::timer::PomodoroConfig;
 
@@ -50,6 +51,9 @@ pub struct Task {
     /// Time estimate when given in minutes; `estimate_blocks` is derived from it
     /// and re-derived when the focus length changes.
     pub estimate_minutes: Option<u32>,
+    /// Fields written by a newer Cadence; kept so an older process never erases them.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl Default for Task {
@@ -71,6 +75,7 @@ impl Default for Task {
             position: 0,
             due_at_ms: None,
             estimate_minutes: None,
+            extra: Map::new(),
         }
     }
 }
@@ -98,6 +103,8 @@ pub struct FocusSession {
     pub minutes: u32,
     pub completed_at_ms: u64,
     pub day: String,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -244,9 +251,92 @@ pub fn build_plan(
     }
 }
 
+/// The plan's focus blocks as an iCalendar file (UTC times), for Calendar to import.
+pub fn plan_ics(plan: &DayPlan, now_ms: u64) -> String {
+    let mut lines = vec![
+        "BEGIN:VCALENDAR".to_string(),
+        "VERSION:2.0".into(),
+        "PRODID:-//Cadence//Day plan//EN".into(),
+        "CALSCALE:GREGORIAN".into(),
+    ];
+    for block in plan.blocks.iter().filter(|block| block.kind == "focus") {
+        let title = block.task_title.as_deref().unwrap_or("Focus");
+        lines.extend([
+            "BEGIN:VEVENT".to_string(),
+            format!("UID:cadence-{}-{}@cadence", block.task_id.as_deref().unwrap_or("focus"), block.start_at_ms),
+            format!("DTSTAMP:{}", ics_time(now_ms)),
+            format!("DTSTART:{}", ics_time(block.start_at_ms)),
+            format!("DTEND:{}", ics_time(block.end_at_ms)),
+            format!("SUMMARY:Focus: {}", ics_escape(title)),
+            "END:VEVENT".into(),
+        ]);
+    }
+    lines.push("END:VCALENDAR".into());
+    lines.iter().map(|line| ics_fold(line) + "\r\n").collect()
+}
+
+fn ics_escape(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace(';', "\\;")
+        .replace(',', "\\,")
+        .replace('\n', "\\n")
+        .replace('\r', "")
+}
+
+/// RFC 5545: lines longer than 75 octets continue on the next line after a space.
+fn ics_fold(line: &str) -> String {
+    let mut out = String::new();
+    let mut width = 0;
+    for ch in line.chars() {
+        if width + ch.len_utf8() > 75 {
+            out.push_str("\r\n ");
+            width = 1;
+        }
+        out.push(ch);
+        width += ch.len_utf8();
+    }
+    out
+}
+
+/// Epoch ms → `YYYYMMDDTHHMMSSZ`.
+fn ics_time(ms: u64) -> String {
+    let secs = ms / 1000;
+    let (y, m, d) = civil_from_days((secs / 86_400) as i64);
+    let rem = secs % 86_400;
+    format!("{y:04}{m:02}{d:02}T{:02}{:02}{:02}Z", rem / 3600, rem % 3600 / 60, rem % 60)
+}
+
+/// Days since 1970-01-01 → (year, month, day), proleptic Gregorian (H. Hinnant).
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (yoe + era * 400 + i64::from(m <= 2), m, d)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plan_exports_focus_blocks_as_icalendar() {
+        let mut deep = task("deep", 2, Priority::High);
+        deep.title = "Write the spec, part 1; draft".into();
+        let start = PlanStart { at_ms: 1_794_670_200_000, ..PlanStart::default() };
+        let plan = build_plan(&[deep], &PomodoroConfig::default(), &start, 600, 0);
+        let ics = plan_ics(&plan, 0);
+        assert_eq!(ics.matches("BEGIN:VEVENT").count(), 2, "breaks are left out");
+        assert!(ics.contains("DTSTART:20261114T153000Z\r\n"));
+        assert!(ics.contains("DTEND:20261114T155500Z\r\n"));
+        assert!(ics.contains("SUMMARY:Focus: Write the spec\\, part 1\\; draft\r\n"));
+        assert!(ics_fold(&"é".repeat(100)).split("\r\n").all(|line| line.len() <= 75));
+        assert_eq!(ics_time(951_782_400_000), "20000229T000000Z", "leap day");
+    }
 
     fn task(id: &str, blocks: u32, priority: Priority) -> Task {
         Task {

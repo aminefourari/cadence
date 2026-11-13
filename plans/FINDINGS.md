@@ -1,35 +1,32 @@
 # Cadence audit: findings
 
-Audited 2026-11-08 at standard depth. All of `core/src` and `AppModel`, `CoreClient`, `YouTubePlayer`, `BraveImporter`, `NotificationManager`, and `CadenceApp` were read in full. The other views were skimmed. Not audited: `DesignSystem.swift` (rendering and perf details), `SettingsView`, `scripts/generate_icon.py`.
-Baseline: `cargo test` passes 9/9. There are no Swift tests and no CI, and the folder is **not a git repo**.
+Second audit, 2026-11-13, at `c19d864` (v1.7.2), standard depth. The Rust core, `cadence-mcp`, `AppModel`, `CoreClient`, `Updater`, `YouTubePlayer`, `BraveImporter`, `FocusGuard`, `NotificationManager` and CI were read in full. The views were only skimmed.
 
-## Problems, ordered by leverage
+The first audit (2026-11-08) is fully shipped except calendar export, which this round adds.
 
-| # | Finding | Category | Impact | Effort | Risk | Evidence |
-|---|---|---|---|---|---|---|
-| 1 | **Volume slider stops working after the first change.** Top-level `const p=` is injected through `evaluateJavaScript` more than once on the same page, so every later call throws `SyntaxError: duplicate variable 'p'`. The next status poll then moves the slider back. I reproduced this in JavaScriptCore. | bug | High | S | Low | `App/Sources/YouTubePlayer.swift:235`, `:379` |
-| 2 | **A running session is lost on quit, crash, or relaunch.** `Persisted` stores the config, stats, and tasks, but not the phase, `ends_at_ms`, `remaining_ms`, `completed_in_cycle`, or the intention. After relaunch the user always gets a fresh 25-minute focus and the cycle count goes back to 0. | bug/UX | High | M | Med | `core/src/storage.rs:36-43`, `core/src/lib.rs:47-62` |
-| 3 | **A corrupt or unreadable state file is silently overwritten with defaults.** `load()` returns `None` on any parse error, and `initialize` then calls `save()` right away, which wipes all tasks, history, and stats. | data loss | High | S | Low | `core/src/storage.rs:45-48`, `core/src/lib.rs:63-65` |
-| 4 | **Notifications depend on the in-app 4 Hz timer.** When the window is closed, App Nap can throttle that timer, so the "focus complete" banner and chime can arrive late. A `UNTimeIntervalNotificationTrigger` scheduled at start, or a `ProcessInfo.beginActivity` while the timer runs, would fix it. | bug | Med | S | Low | `App/Sources/AppModel.swift:271-295`, `NotificationManager.swift:34-50` |
-| 5 | **No version control.** The folder has no `.git`, even though a `.gitignore` exists. Nothing can be reverted, and an 11 MB `background-test.png` sits in the root. | DX | High | S | None | repo root |
-| 6 | **The README describes an older app.** It says "does not embed a second player" (it now embeds a WKWebView), lists `music.rs` and `music.*` commands (neither exists), says ⌘2 opens Music (it is now ⌘3, ⌘2 is Tasks), and never mentions Tasks, the planner, the intention check-in, the shutdown ritual, or the menu bar widget. | docs | Med | S | None | `README.md` vs `CadenceApp.swift:45-62`, `core/src/lib.rs:1-3` |
-| 7 | **The UI and core disagree on small things.** The task editor caps estimates at 12 blocks while the core allows 24. The delete dialog says focus history is removed, but sessions are kept. | polish | Low | S | Low | `TasksView.swift:686`, `TasksView.swift:55`, `core/src/lib.rs:313-324` |
-| 8 | **No Swift-side tests.** `CoreClient` JSON decoding against the Rust output is untested, so a serde rename in Rust only shows up at runtime. One Rust test that snapshots the `TimerState` JSON keys would catch most of this. | tests | Med | S | None | `core/src/lib.rs:513-562` |
+## Fixed in this round
 
-Considered and rejected:
-- The 4 Hz heartbeat crossing the FFI with JSON costs very little at this size.
-- `sessions` grows without limit, but years of use is about 1 MB.
-- `assignTask` pausing the timer is by design.
+| # | Finding | Fix |
+|---|---|---|
+| 1 | After a write from `cadence-mcp`, the app reloads and rebuilds the engine, which restarts transition ids at 0. The app then ignores the next completions (no toast, no chime, no refresh). | `PomodoroEngine::continue_transitions_from` keeps the ids increasing. Test: `transition_ids_keep_increasing_after_an_external_reload`. |
+| 2 | An older process (for example a `cadence-mcp` still running from before an update) drops fields it doesn't know when it saves. That erases data written by the newer version. | `#[serde(flatten)] extra` on every persisted struct. Test: `unknown_fields_survive_a_round_trip`. |
+| 3 | The 4 Hz heartbeat republishes the model every tick, so every view re-renders 4×/s. | The timer is published only when the visible second changes, and the date only by the minute. |
+| 4 | A save without fsync can leave a truncated file after a crash. That file is then moved aside without telling the user, and save failures are silent. | fsync of the file and the folder. `storageWarning` in the timer state, shown as a toast. |
+| 5 | Focus completed through MCP while the app is closed is logged under the wrong day. | `cadence-mcp` sends today's local date with every command. |
+| 6 | The daily target lives in UserDefaults, and MCP shells out to `defaults read` to get it. | The target is persisted in the core (`plan.setTarget`) and moved over from UserDefaults once at launch. |
+| 7 | The release workflow uses actions pinned only by tag while the signing secrets are in scope. | Actions are pinned to commit SHAs. |
+| 8 | The video ID from Brave reaches the embed URL without validation. | It goes through `YouTubeURL.extractVideoID`. |
 
-## Direction: features worth weighing
+## Features added
 
-1. **History and stats view.** This is the best payoff for the least work. The core already logs a `FocusSession` for every completed block, with its task, quadrant, intention, minutes, and day (`core/src/lib.rs:197-206`), but nothing in the UI reads it. Possible views: a week heatmap or bar chart, streaks, minutes per quadrant, and "what I intended vs. did". It needs one `sessions.list` command plus one view, and Swift Charts ships with the system. Effort M.
-2. **Music follows the timer.** Pause YouTube automatically when a break starts and resume it when focus starts, or play a separate "break" video. Both the player and `handleTransition` already exist, so this is a hook in `AppModel.applyTimer` plus a setting. Effort S.
-3. **Focus guard during sessions.** Turn on a macOS Focus mode through a Shortcuts URL, or warn when distracting apps or sites come to the front while a focus block runs. This is valuable, but it adds permissions and can feel intrusive. Effort M–L.
-4. **Plan → calendar.** Export the generated day plan (`plan.build`) as an `.ics` file or write it to Calendar through EventKit, so the time-boxed day shows up next to meetings. You could also go the other way and read busy blocks so the planner works around meetings. Effort M (export) / L (two-way).
+- App Intents: Start Focus, Pause Timer and Add Task, available in Shortcuts, Siri and Spotlight (`CadenceIntents.swift`).
+- A reminder notification 1 hour before a task's deadline.
+- Day plan export to Calendar (`plan.ics`, an iCalendar file with focus blocks only).
+- New MCP tools: `skip_interval`, `reset_timer`, `set_interval_length`, `reorder_tasks`, `focus_summary`.
 
-Recommended order: 5 (git) → 1, 3 (quick bugs) → 2 (session restore) → 4 → direction #1.
+## Considered and rejected
 
-## Status (2026-11-08)
-
-Fixes 1–8 and features 1–3 are implemented and not yet committed (baseline commit `94ecff5`). Feature 4 (calendar) was not started.
+- The 4 Hz file lock and stat on every tick cost very little at this size.
+- Two processes generating the same task id is not a real risk: it needs the same millisecond and the same sequence number.
+- Leftover updater temp folders: the OS cleans them up.
+- Two-way calendar sync (reading busy times back): costly, deferred until the export proves useful.

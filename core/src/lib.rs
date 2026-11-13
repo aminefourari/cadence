@@ -11,10 +11,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use storage::Stats;
-use tasks::{blocks_for, build_plan, ordered_tasks, FocusSession, PlanStart, Priority, Task};
+use tasks::{
+    blocks_for, build_plan, ordered_tasks, plan_ics, DayPlan, FocusSession, PlanStart, Priority, Task,
+};
 use timer::{Phase, PomodoroConfig, PomodoroEngine};
 
 struct AppCore {
@@ -27,7 +29,16 @@ struct AppCore {
     disk_mtime: Option<SystemTime>,
     /// Bumped when another process (e.g. `cadence-mcp`) changed the state file.
     external_revision: u64,
+    daily_target_minutes: Option<u32>,
+    /// Top-level state-file fields from a newer Cadence, written back unchanged.
+    persisted_extra: Map<String, Value>,
+    /// The last save failed; cleared by the next successful save.
+    save_error: Option<String>,
+    /// The state file was unreadable and moved aside at load.
+    recovery_notice: Option<String>,
 }
+
+const DEFAULT_TARGET_MINUTES: u32 = 240;
 
 impl AppCore {
     fn new() -> Self {
@@ -39,6 +50,10 @@ impl AppCore {
             storage_path: None,
             disk_mtime: None,
             external_revision: 0,
+            daily_target_minutes: None,
+            persisted_extra: Map::new(),
+            save_error: None,
+            recovery_notice: None,
         }
     }
 
@@ -54,7 +69,7 @@ impl AppCore {
         let _lock = self.lock_storage();
         self.disk_mtime = None;
         self.sync_from_disk(now);
-        // No day (e.g. cadence-mcp, which has no local calendar) keeps the saved day's stats.
+        // No day keeps the saved day's stats.
         if let Some(day) = request.get("day").and_then(Value::as_str) {
             self.stats.for_day(day);
         }
@@ -209,7 +224,19 @@ impl AppCore {
             "tasks.toggle" => self.task_toggle(&request, now),
             "tasks.delete" => self.task_delete(&request),
             "tasks.clearOpen" => self.clear_open_tasks(),
-            "plan.build" => self.build_plan_value(&request, now),
+            "plan.build" => serde_json::to_value(self.plan(&request, now))
+                .map_err(|error| CoreFailure::new("serialization", error.to_string())),
+            "plan.ics" => Ok(json!(plan_ics(&self.plan(&request, now), now))),
+            "plan.setTarget" => {
+                let minutes = request
+                    .get("minutes")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| CoreFailure::new("bad_request", "Minutes are required."))?;
+                self.daily_target_minutes = Some(minutes.clamp(30, 720) as u32);
+                self.save();
+                serde_json::to_value(self.plan(&request, now))
+                    .map_err(|error| CoreFailure::new("serialization", error.to_string()))
+            }
             _ => Err(CoreFailure::new(
                 "unknown_command",
                 format!("Unknown command: {command}"),
@@ -220,6 +247,7 @@ impl AppCore {
     fn state_value(&self, now: u64) -> Value {
         let mut value = timer::to_value(self.engine.state(now, &self.stats));
         value["externalRevision"] = json!(self.external_revision);
+        value["storageWarning"] = json!(self.save_error.as_ref().or(self.recovery_notice.as_ref()));
         value
     }
 
@@ -243,17 +271,28 @@ impl AppCore {
             return false;
         }
         self.disk_mtime = mtime;
-        let Some(persisted) = self.storage_path.as_deref().and_then(|path| storage::load(path, now))
-        else {
+        let Some(path) = self.storage_path.as_deref() else {
             return false;
         };
-        self.engine = PomodoroEngine::new(persisted.config);
+        let persisted = match storage::load(path, now) {
+            Ok(Some(persisted)) => persisted,
+            Ok(None) => return false,
+            Err(notice) => {
+                self.recovery_notice = Some(notice);
+                return false;
+            }
+        };
+        let mut engine = PomodoroEngine::new(persisted.config);
+        engine.continue_transitions_from(&self.engine);
+        self.engine = engine;
         if let Some(snapshot) = persisted.timer {
             self.engine.restore(snapshot);
         }
         self.stats = persisted.stats;
         self.tasks = persisted.tasks;
         self.sessions = persisted.sessions;
+        self.daily_target_minutes = persisted.daily_target_minutes;
+        self.persisted_extra = persisted.extra;
         if let Some(active_id) = persisted.active_task_id {
             if self.tasks.iter().any(|task| task.id == active_id && !task.done) {
                 self.engine.set_active_task(Some(active_id));
@@ -309,6 +348,7 @@ impl AppCore {
             minutes,
             completed_at_ms: now,
             day: self.stats.day.clone(),
+            extra: Map::new(),
         });
     }
 
@@ -467,11 +507,12 @@ impl AppCore {
         Ok(json!(ordered_tasks(&self.tasks)))
     }
 
-    fn build_plan_value(&self, request: &Value, now: u64) -> Result<Value, CoreFailure> {
+    /// `targetMinutes` in the request overrides the saved daily target.
+    fn plan(&self, request: &Value, now: u64) -> DayPlan {
         let target_minutes = request
             .get("targetMinutes")
             .and_then(Value::as_u64)
-            .unwrap_or(240)
+            .unwrap_or(u64::from(self.daily_target_minutes.unwrap_or(DEFAULT_TARGET_MINUTES)))
             .min(1440) as u32;
         let buffer_minutes = request
             .get("bufferMinutes")
@@ -487,9 +528,7 @@ impl AppCore {
             after_focus: in_focus,
             running_task_id: if in_focus { state.active_task_id.clone() } else { None },
         };
-        let plan = build_plan(&self.tasks, self.engine.config(), &start, target_minutes, buffer_minutes);
-        serde_json::to_value(plan)
-            .map_err(|error| CoreFailure::new("serialization", error.to_string()))
+        build_plan(&self.tasks, self.engine.config(), &start, target_minutes, buffer_minutes)
     }
 
     fn save(&mut self) {
@@ -503,8 +542,11 @@ impl AppCore {
             sessions: self.sessions.clone(),
             active_task_id: self.engine.active_task_id().cloned(),
             timer: Some(self.engine.snapshot()),
+            daily_target_minutes: self.daily_target_minutes,
+            extra: self.persisted_extra.clone(),
         };
-        if let Err(error) = storage::save(path, &payload) {
+        self.save_error = storage::save(path, &payload).err();
+        if let Some(error) = &self.save_error {
             eprintln!("[cadence-core] {error}");
         }
         self.disk_mtime = self.file_mtime();
@@ -663,8 +705,8 @@ mod tests {
             keys,
             [
                 "activeTaskId", "completedInCycle", "config", "cycleLength", "endsAtMs",
-                "externalRevision", "intention", "phase", "remainingMs", "running", "todayFocusMinutes",
-                "todaySessions", "totalMs", "totalSessions", "transition",
+                "externalRevision", "intention", "phase", "remainingMs", "running", "storageWarning",
+                "todayFocusMinutes", "todaySessions", "totalMs", "totalSessions", "transition",
             ]
         );
         let mut config: Vec<&str> =
@@ -786,6 +828,60 @@ mod tests {
         assert_eq!(tasks.as_array().unwrap().len(), 2);
         let state = app.handle(json!({"cmd": "tick", "nowMs": 5})).unwrap();
         assert_eq!(state["externalRevision"], 1, "own writes are not external");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The app ignores transitions with an id it has already seen, so a reload after an
+    /// external write must not restart the ids at 0.
+    #[test]
+    fn transition_ids_keep_increasing_after_an_external_reload() {
+        let dir = std::env::temp_dir().join(format!("cadence-ids-{}", std::process::id()));
+        let path = dir.join("core-state.json");
+        let init = json!({"cmd": "initialize", "storagePath": path.to_str().unwrap(), "day": "2026-11-11"});
+        let (mut app, mut mcp) = (AppCore::new(), AppCore::new());
+        app.handle(init.clone()).unwrap();
+        mcp.handle(init).unwrap();
+
+        let skipped = app.handle(json!({"cmd": "timer.skip", "nowMs": 1})).unwrap();
+        assert_eq!(skipped["transition"]["id"], 1);
+        mcp.handle(json!({"cmd": "tasks.add", "title": "from agent", "nowMs": 2})).unwrap();
+        app.handle(json!({"cmd": "tick", "nowMs": 3})).unwrap();
+        let next = app.handle(json!({"cmd": "timer.skip", "nowMs": 4})).unwrap();
+        assert_eq!(next["transition"]["id"], 2);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn daily_target_is_saved_and_used_by_the_plan() {
+        let dir = std::env::temp_dir().join(format!("cadence-target-{}", std::process::id()));
+        let path = dir.join("core-state.json");
+        let init = json!({"cmd": "initialize", "storagePath": path.to_str().unwrap(), "day": "2026-11-11"});
+        let mut core = AppCore::new();
+        core.handle(init.clone()).unwrap();
+        assert_eq!(core.handle(json!({"cmd": "plan.build", "nowMs": 1})).unwrap()["targetMinutes"], 240);
+        let set = core.handle(json!({"cmd": "plan.setTarget", "minutes": 90, "nowMs": 2})).unwrap();
+        assert_eq!(set["targetMinutes"], 90);
+
+        let mut other = AppCore::new();
+        other.handle(init).unwrap();
+        let plan = other.handle(json!({"cmd": "plan.build", "nowMs": 3})).unwrap();
+        assert_eq!(plan["targetMinutes"], 90, "persisted for the next process");
+        let overridden = other.handle(json!({"cmd": "plan.build", "targetMinutes": 60, "nowMs": 4})).unwrap();
+        assert_eq!(overridden["targetMinutes"], 60);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_corrupt_state_file_is_reported_to_the_app() {
+        let dir = std::env::temp_dir().join(format!("cadence-warn-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("core-state.json");
+        fs::write(&path, "{ not json").unwrap();
+        let mut core = AppCore::new();
+        let state = core
+            .handle(json!({"cmd": "initialize", "storagePath": path.to_str().unwrap(), "nowMs": 7}))
+            .unwrap();
+        assert!(state["storageWarning"].as_str().unwrap().contains("corrupt-7"));
         fs::remove_dir_all(&dir).unwrap();
     }
 

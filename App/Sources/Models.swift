@@ -273,7 +273,7 @@ struct PomodoroConfig: Codable, Equatable {
     }
 }
 
-struct TimerTransition: Codable, Identifiable {
+struct TimerTransition: Codable, Identifiable, Equatable {
     let id: Int
     let completedPhase: PomodoroPhase
     let nextPhase: PomodoroPhase
@@ -282,10 +282,10 @@ struct TimerTransition: Codable, Identifiable {
     let focusMinutesAdded: Int
 }
 
-struct TimerState: Codable {
+struct TimerState: Codable, Equatable {
     let phase: PomodoroPhase
     let running: Bool
-    let remainingMs: Int
+    var remainingMs: Int
     let totalMs: Int
     let endsAtMs: Int?
     let completedInCycle: Int
@@ -299,6 +299,15 @@ struct TimerState: Codable {
     let transition: TimerTransition?
     /// Changes when another process (cadence-mcp) edited the saved state.
     var externalRevision: Int? = nil
+    /// Set when saving failed or the saved file was unreadable and moved aside.
+    var storageWarning: String? = nil
+
+    /// Same state as far as the UI can tell: views show whole seconds.
+    func looksTheSame(as other: TimerState) -> Bool {
+        var aligned = self
+        aligned.remainingMs = other.remainingMs
+        return aligned == other && remainingSeconds == other.remainingSeconds
+    }
 
     static let placeholder = TimerState(
         phase: .focus,

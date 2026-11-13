@@ -18,9 +18,10 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 
 ## Layout
 
-- `core/src/lib.rs` — C ABI (`cadence_core_invoke/free/abi_version`) + command router (`timer.*`, `tasks.*`, `sessions.list`, `plan.build`)
+- `core/src/lib.rs` — C ABI (`cadence_core_invoke/free/abi_version`) + command router (`timer.*`, `tasks.*`, `sessions.list`, `plan.build`/`plan.setTarget`/`plan.ics`)
 - `core/src/timer.rs` — Pomodoro state machine; `tasks.rs` — tasks (priority, in-progress, archived, position for the Kanban board), day planner; `storage.rs` — JSON persistence (`~/Library/Application Support/Cadence/core-state.json`)
 - `App/Sources/CoreClient.swift` — Swift wrapper for the ABI; `AppModel.swift` — main `ObservableObject`, 4 Hz heartbeat ticks the core
+- `App/Sources/CadenceIntents.swift` — App Intents (Shortcuts/Siri); they call `AppModel.shared`
 - `App/Sources/YouTubePlayer.swift` — embedded WKWebView YouTube player; `BraveImporter.swift` — pulls the current video from Brave via osascript
 - `AppModel.focusActivityChanged` — single hook for focus start/stop side effects (music follows timer, `FocusGuard.swift`, Shortcuts)
 - Views: `FocusView`, `TasksView`, `MusicView`, `HistoryView`, `SettingsView`, `ShutdownRitualView`, `IntentionCheckInView`, `MenuBarWidgetView`, `SidebarView`; shared styling in `DesignSystem.swift`
@@ -29,6 +30,7 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 
 - Business logic lives in Rust; Swift renders state and sends intents. New commands: add to `AppCore::handle` + a `CoreClient` method.
 - JSON is camelCase (`#[serde(rename_all = "camelCase", default)]`); enums are snake_case.
+- Persisted structs carry `#[serde(flatten)] extra: Map<String, Value>` so fields from a newer version survive an older process's save. New persisted structs need it too.
 - Every core mutation calls `self.save()`. The state file is shared with `cadence-mcp`: `AppCore::handle` takes a file lock, reloads if the file's mtime changed, and bumps `externalRevision` so the app reloads tasks.
 - Errors surface in the UI via `AppModel.showToast(..., tint: Theme.amber)`.
 - Debug launch args: `--demo-data`, `--tab=`, `--theme=`, `--show-settings`, `--video=` etc. (see `AppModel.init`).
