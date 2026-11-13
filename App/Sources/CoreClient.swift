@@ -175,15 +175,26 @@ struct CoreClient {
         )
     }
 
-    func buildPlan(nowMs: Int, targetMinutes: Int, bufferMinutes: Int) throws -> DayPlan {
+    /// Uses the daily target saved in the core.
+    func buildPlan(nowMs: Int, bufferMinutes: Int) throws -> DayPlan {
         try call(
-            [
-                "cmd": "plan.build",
-                "nowMs": nowMs,
-                "targetMinutes": targetMinutes,
-                "bufferMinutes": bufferMinutes
-            ],
+            ["cmd": "plan.build", "nowMs": nowMs, "bufferMinutes": bufferMinutes],
             as: DayPlan.self
+        )
+    }
+
+    func setDailyTarget(minutes: Int, nowMs: Int, bufferMinutes: Int) throws -> DayPlan {
+        try call(
+            ["cmd": "plan.setTarget", "minutes": minutes, "nowMs": nowMs, "bufferMinutes": bufferMinutes],
+            as: DayPlan.self
+        )
+    }
+
+    /// The day plan's focus blocks as iCalendar text.
+    func planICS(nowMs: Int, bufferMinutes: Int) throws -> String {
+        try call(
+            ["cmd": "plan.ics", "nowMs": nowMs, "bufferMinutes": bufferMinutes],
+            as: String.self
         )
     }
 
@@ -214,6 +225,10 @@ struct CoreClient {
         }
         guard let payload = root["data"] else {
             throw CoreClientError.invalidResponse
+        }
+        // A bare string (plan.ics) isn't a JSON document JSONSerialization can re-encode.
+        if let text = payload as? String, let value = text as? T {
+            return value
         }
         let payloadData = try JSONSerialization.data(withJSONObject: payload)
         do {

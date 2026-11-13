@@ -5,9 +5,14 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
+    /// The app's model, for App Intents (Shortcuts, Siri), which run outside any view.
+    private(set) static weak var shared: AppModel?
+
     @Published var selectedTab: AppTab = .focus
     @Published private(set) var timer: TimerState = .placeholder
-    @Published private(set) var tasks: [TaskItem] = []
+    @Published private(set) var tasks: [TaskItem] = [] {
+        didSet { syncDeadlineReminders() }
+    }
     @Published private(set) var plan: DayPlan = .empty
     @Published private(set) var sessions: [FocusSession] = []
     @Published private(set) var notificationsAuthorized = false
@@ -42,6 +47,7 @@ final class AppModel: ObservableObject {
     }
     @Published private(set) var backgroundImage: NSImage?
     @Published private(set) var backgroundVideoURL: URL?
+    /// Saved in the core (so cadence-mcp plans with it too); mirrors `plan.targetMinutes`.
     @Published var dailyTargetMinutes: Int {
         didSet {
             let clamped = min(720, max(30, dailyTargetMinutes))
@@ -49,8 +55,17 @@ final class AppModel: ObservableObject {
                 dailyTargetMinutes = clamped
                 return
             }
-            UserDefaults.standard.set(dailyTargetMinutes, forKey: Self.targetKey)
-            refreshPlan()
+            guard dailyTargetMinutes != plan.targetMinutes else { return }
+            do {
+                plan = try CoreClient.shared.setDailyTarget(
+                    minutes: dailyTargetMinutes,
+                    nowMs: CoreClient.nowMs(),
+                    bufferMinutes: planBufferMinutes
+                )
+                lastPlanRefresh = Date()
+            } catch {
+                coreError = error.localizedDescription
+            }
         }
     }
 
@@ -104,6 +119,8 @@ final class AppModel: ObservableObject {
     private let player: YouTubePlayerController
     private let focusGuard = FocusGuard()
     private var musicPausedByTimer = false
+    /// What the pending deadline reminders were built from; forces one sync at launch.
+    private var deadlineSignature = ["unsynced"]
 
     init(player: YouTubePlayerController) {
         self.player = player
@@ -142,8 +159,7 @@ final class AppModel: ObservableObject {
             Theme.appearance = appearance
         }
 
-        let savedTarget = UserDefaults.standard.integer(forKey: Self.targetKey)
-        dailyTargetMinutes = savedTarget > 0 ? savedTarget : 240
+        dailyTargetMinutes = 240 // replaced by the core's saved target in bootstrap()
 
         let fileManager = FileManager.default
         let supportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -214,6 +230,7 @@ final class AppModel: ObservableObject {
             self?.nudgeBackToFocus(from: appName)
         }
 
+        Self.shared = self
         bootstrap()
         if demoData {
             seedDemoDataIfNeeded()
@@ -309,9 +326,11 @@ final class AppModel: ObservableObject {
             let state = try CoreClient.shared.initialize(storagePath: storagePath, day: currentDay)
             timer = state
             lastTransitionID = state.transition?.id ?? 0
+            announceStorageWarning(state.storageWarning, previous: nil)
             reloadTasks()
             reloadSessions()
             syncScheduledNotification()
+            migrateDailyTarget()
             refreshPlan()
         } catch {
             coreError = error.localizedDescription
@@ -346,11 +365,44 @@ final class AppModel: ObservableObject {
         ticker = timer
     }
 
+    /// The daily target used to live in UserDefaults; move it into the core once.
+    private func migrateDailyTarget() {
+        let defaults = UserDefaults.standard
+        // --demo-data uses its own file; the real target must land in the real one.
+        guard defaults.object(forKey: Self.targetKey) != nil,
+              !storagePath.hasSuffix("core-demo.json") else { return }
+        let saved = defaults.integer(forKey: Self.targetKey)
+        do {
+            if saved > 0 {
+                _ = try CoreClient.shared.setDailyTarget(
+                    minutes: saved,
+                    nowMs: CoreClient.nowMs(),
+                    bufferMinutes: planBufferMinutes
+                )
+            }
+            defaults.removeObject(forKey: Self.targetKey)
+        } catch {
+            coreError = error.localizedDescription
+        }
+    }
+
+    private func announceStorageWarning(_ warning: String?, previous: String?) {
+        guard let warning, warning != previous else { return }
+        showToast("Your data needs attention", warning, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+    }
+
     private func heartbeat() {
-        currentDate = Date()
+        // Publishing re-renders every view that watches the model, so only publish what
+        // changed visibly: the date by the minute, the timer by the second.
+        let now = Date()
+        if Int(now.timeIntervalSince1970 / 60) != Int(currentDate.timeIntervalSince1970 / 60) {
+            currentDate = now
+        }
         do {
             let state = try CoreClient.shared.tick(nowMs: CoreClient.nowMs(), day: currentDay)
-            applyTimer(state)
+            if !state.looksTheSame(as: timer) {
+                applyTimer(state)
+            }
             if coreError != nil { coreError = nil }
         } catch {
             coreError = error.localizedDescription
@@ -367,6 +419,7 @@ final class AppModel: ObservableObject {
         let previousTimer = timer
         timer = state
         syncScheduledNotification()
+        announceStorageWarning(state.storageWarning, previous: previousTimer.storageWarning)
         let wasFocusing = previousTimer.running && previousTimer.phase == .focus
         let isFocusing = state.running && state.phase == .focus
         if wasFocusing != isFocusing {
@@ -600,6 +653,21 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Starts focus without the intention prompt (Shortcuts, Siri): switches to the focus
+    /// phase if a break is up, then starts a fresh interval or resumes a paused one.
+    func startFocus(intention: String?, minutes: Int?) {
+        guard !timer.running else { return }
+        if timer.phase != .focus {
+            performTimerCommand("timer.select", phase: .focus)
+        }
+        if timer.isFreshInterval {
+            beginFocus(intention: intention ?? "", minutes: minutes.map { min(180, max(1, $0)) })
+        } else {
+            requestNotificationsIfNeeded()
+            performTimerCommand("timer.resume")
+        }
+    }
+
     func cancelIntentionPrompt() {
         showIntentionPrompt = false
     }
@@ -719,6 +787,7 @@ final class AppModel: ObservableObject {
         estimateMinutes: Int? = nil,
         dueAtMs: Int? = nil
     ) {
+        if dueAtMs != nil { requestNotificationsIfNeeded() }
         do {
             tasks = try CoreClient.shared.addTask(
                 title: title,
@@ -757,6 +826,7 @@ final class AppModel: ObservableObject {
         estimateMinutes: Int? = nil,
         dueAtMs: Int?? = nil
     ) {
+        if case .some(.some) = dueAtMs { requestNotificationsIfNeeded() }
         do {
             tasks = try CoreClient.shared.updateTask(
                 id: task.id,
@@ -872,15 +942,46 @@ final class AppModel: ObservableObject {
 
     func refreshPlan() {
         do {
-            plan = try CoreClient.shared.buildPlan(
-                nowMs: CoreClient.nowMs(),
-                targetMinutes: dailyTargetMinutes,
-                bufferMinutes: planBufferMinutes
-            )
+            plan = try CoreClient.shared.buildPlan(nowMs: CoreClient.nowMs(), bufferMinutes: planBufferMinutes)
             lastPlanRefresh = Date()
+            if plan.targetMinutes > 0, plan.targetMinutes != dailyTargetMinutes {
+                dailyTargetMinutes = plan.targetMinutes // the core's saved target wins
+            }
         } catch {
             coreError = error.localizedDescription
         }
+    }
+
+    /// Opens the plan's focus blocks in Calendar, which asks which calendar to add them to.
+    func exportPlanToCalendar() {
+        do {
+            let ics = try CoreClient.shared.planICS(nowMs: CoreClient.nowMs(), bufferMinutes: planBufferMinutes)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Cadence Day Plan.ics")
+            try ics.write(to: url, atomically: true, encoding: .utf8)
+            NSWorkspace.shared.open(url)
+        } catch {
+            showToast("Couldn't export the plan", error.localizedDescription, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+        }
+    }
+
+    /// Keeps one "due in 1 hour" reminder per open task with a deadline.
+    private func syncDeadlineReminders() {
+        let lead = 60 * 60_000
+        let now = CoreClient.nowMs()
+        let reminders: [DeadlineReminder] = tasks.compactMap { task in
+            guard !task.done, !task.archived, let due = task.dueAtMs, due - lead > now,
+                  let dueDate = task.dueDate else { return nil }
+            return DeadlineReminder(
+                id: task.id,
+                fireAt: dueDate.addingTimeInterval(-Double(lead) / 1000),
+                title: "Due in 1 hour",
+                body: "“\(task.title)” is due at \(dueDate.shortTimeString)."
+            )
+        }
+        let signature = reminders.map { "\($0.id)|\($0.fireAt.timeIntervalSince1970)|\($0.body)" }
+        guard signature != deadlineSignature else { return }
+        deadlineSignature = signature
+        NotificationManager.shared.replaceDeadlineReminders(reminders)
     }
 
     func setDailyTargetHours(_ hours: Int) {

@@ -43,13 +43,28 @@ fn tools() -> Value {
         {"name": "day_plan", "description": "Time-box open tasks into focus blocks and breaks toward the daily focus target: earliest deadline first, then undated tasks by priority. Starts after a running interval, counts focus already done today (doneMinutes), and flags focus blocks that end after their task's deadline (late).",
          "inputSchema": {"type": "object", "properties": {"targetMinutes": {"type": "integer", "description": "Daily focus target. Default: the target set in the app."}}}},
         {"name": "list_sessions", "description": "Completed focus sessions (most recent last).",
-         "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "Default 20."}}}}
+         "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "Default 20."}}}},
+        {"name": "focus_summary", "description": "Focused minutes over the last N days (including today): total, per day and per task.",
+         "inputSchema": {"type": "object", "properties": {"days": {"type": "integer", "minimum": 1, "maximum": 366, "description": "Default 7."}}}},
+        {"name": "skip_interval", "description": "End the current interval now and move to the next one (a skipped focus block is not credited).",
+         "inputSchema": {"type": "object", "properties": {}}},
+        {"name": "reset_timer", "description": "Stop the timer and restart the current interval at its full length.",
+         "inputSchema": {"type": "object", "properties": {}}},
+        {"name": "set_interval_length", "description": "One-off length for the current interval (not while it is running); the next interval uses the configured length again.",
+         "inputSchema": {"type": "object", "required": ["minutes"], "properties": {"minutes": {"type": "integer", "minimum": 1, "maximum": 180}}}},
+        {"name": "reorder_tasks", "description": "Set the manual board order: the listed task ids get positions 0, 1, 2… in that order.",
+         "inputSchema": {"type": "object", "required": ["ids"], "properties": {"ids": {"type": "array", "items": id}}}}
     ])
 }
 
 /// Sends one core command; returns its data or the core's error message.
 fn core(cmd: &str, mut args: Value) -> Result<Value, String> {
     args["cmd"] = json!(cmd);
+    // Today's local date, so stats and logged sessions land on the right day even while
+    // the app is closed.
+    if let Some(day) = date(&["+%Y-%m-%d"]) {
+        args["day"] = json!(day);
+    }
     let response: Value = serde_json::from_str(&cadence_core::process_request(&args.to_string()))
         .map_err(|error| error.to_string())?;
     if response["ok"] == true {
@@ -75,14 +90,6 @@ fn find_task(id: &str) -> Result<Value, String> {
         .into_iter()
         .find(|task| task["id"] == id)
         .ok_or_else(|| "Task not found.".to_string())
-}
-
-fn defaults_int(key: &str) -> Option<u64> {
-    let output = std::process::Command::new("/usr/bin/defaults")
-        .args(["read", "com.amine.cadence", key])
-        .output()
-        .ok()?;
-    String::from_utf8_lossy(&output.stdout).trim().parse().ok()
 }
 
 /// Runs macOS `date`, which knows the user's time zone (including DST on that date).
@@ -207,21 +214,51 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             }
         }
         "pause_timer" => core("timer.pause", json!({})),
-        "day_plan" => {
-            let mut request = pick(&["targetMinutes"]);
-            if request.get("targetMinutes").is_none() {
-                // The app keeps the daily target in its preferences, not in the core.
-                if let Some(target) = defaults_int("cadence.dailyTargetMinutes") {
-                    request["targetMinutes"] = json!(target);
-                }
-            }
-            core("plan.build", request)
-        }
+        "day_plan" => core("plan.build", pick(&["targetMinutes"])),
         "list_sessions" => {
             let limit = args["limit"].as_u64().unwrap_or(20) as usize;
             let sessions = core("sessions.list", json!({}))?;
             let all = sessions.as_array().cloned().unwrap_or_default();
             Ok(json!(all[all.len().saturating_sub(limit)..]))
+        }
+        "focus_summary" => {
+            let days = args["days"].as_u64().unwrap_or(7).clamp(1, 366);
+            let since = date(&[&format!("-v-{}d", days - 1), "+%Y-%m-%d"])
+                .ok_or("Could not read today's date.")?;
+            let sessions = core("sessions.list", json!({}))?;
+            let mut by_day = std::collections::BTreeMap::<String, u64>::new();
+            let mut by_task = std::collections::BTreeMap::<String, u64>::new();
+            let mut count = 0;
+            for session in sessions.as_array().into_iter().flatten() {
+                let day = session["day"].as_str().unwrap_or("");
+                if day < since.as_str() {
+                    continue;
+                }
+                let minutes = session["minutes"].as_u64().unwrap_or(0);
+                count += 1;
+                *by_day.entry(day.to_string()).or_default() += minutes;
+                let task = session["taskTitle"].as_str().unwrap_or("(no task)");
+                *by_task.entry(task.to_string()).or_default() += minutes;
+            }
+            Ok(json!({
+                "since": since,
+                "sessions": count,
+                "totalMinutes": by_day.values().sum::<u64>(),
+                "minutesByDay": by_day,
+                "minutesByTask": by_task,
+            }))
+        }
+        "skip_interval" => core("timer.skip", json!({})),
+        "reset_timer" => core("timer.reset", json!({})),
+        "set_interval_length" => {
+            if core("tick", json!({}))?["running"] == true {
+                return Err("The interval is running; pause or reset it first.".into());
+            }
+            core("timer.setLength", pick(&["minutes"]))
+        }
+        "reorder_tasks" => {
+            core("tasks.reorder", pick(&["ids"]))?;
+            Ok(json!(list()?))
         }
         _ => Err(format!("Unknown tool: {name}")),
     }

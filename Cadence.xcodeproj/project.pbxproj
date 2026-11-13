@@ -27,6 +27,7 @@
 		C0C71E00CDDCF3CE5EFDE6A6 /* BraveImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F8CB72D39D16FC8D58ACD7 /* BraveImporter.swift */; };
 		C6A5BE9FC8C08949CE472DF0 /* AmbientScenes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7887A658ECADDE86EBD21DE0 /* AmbientScenes.swift */; };
 		CFFD38AB2C2E4DA807379320 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C54F892D42E5EC2FBAAC05D /* TasksView.swift */; };
+		DC1DBC7C924B34B6F8ABFB61 /* CadenceIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268C3C3205308B1E615BDB48 /* CadenceIntents.swift */; };
 		E34E2CC2E269DAFBC4645A1B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96A5EF390551823810448BA6 /* SettingsView.swift */; };
 		E6C21F4DE08B83B79EB0DFFE /* CadenceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E888B08581711A9E56B581 /* CadenceApp.swift */; };
 /* End PBXBuildFile section */
@@ -37,6 +38,7 @@
 		121B89E4EFE23929C2C93971 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		1555CAF3601F2878988BA326 /* Updater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Updater.swift; sourceTree = "<group>"; };
 		1C54F892D42E5EC2FBAAC05D /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
+		268C3C3205308B1E615BDB48 /* CadenceIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CadenceIntents.swift; sourceTree = "<group>"; };
 		2747B5C0BD75EFECA1D2569B /* Cadence.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cadence.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		305F2985E43494E4C7E45169 /* MenuBarWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarWidgetView.swift; sourceTree = "<group>"; };
 		30E888B08581711A9E56B581 /* CadenceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CadenceApp.swift; sourceTree = "<group>"; };
@@ -73,6 +75,7 @@
 				45669D384F729B974A289D76 /* AppModel.swift */,
 				E4F8CB72D39D16FC8D58ACD7 /* BraveImporter.swift */,
 				30E888B08581711A9E56B581 /* CadenceApp.swift */,
+				268C3C3205308B1E615BDB48 /* CadenceIntents.swift */,
 				0B4379BE91168428775C7BCE /* CoreClient.swift */,
 				EE41CC70363F0052C6AE9D26 /* DesignSystem.swift */,
 				D43E7E1CE608AC20E5AA7E0E /* FocusGuard.swift */,
@@ -237,6 +240,7 @@
 				2EEDA0F7F576C2471D2C3266 /* AppModel.swift in Sources */,
 				C0C71E00CDDCF3CE5EFDE6A6 /* BraveImporter.swift in Sources */,
 				E6C21F4DE08B83B79EB0DFFE /* CadenceApp.swift in Sources */,
+				DC1DBC7C924B34B6F8ABFB61 /* CadenceIntents.swift in Sources */,
 				1752F19C0E2F952586DD62B2 /* CoreClient.swift in Sources */,
 				4985E9F46982010C95B3C4F5 /* DesignSystem.swift in Sources */,
 				5EE448D43231E694CF7C7245 /* FocusGuard.swift in Sources */,

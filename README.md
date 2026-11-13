@@ -11,10 +11,11 @@ Cadence is deliberately split down the middle: the interface is SwiftUI, while t
 ## What's inside
 
 - **Focus** — 25/5/15 Pomodoro intervals, a long break every four focus sessions, configurable durations, a one-off length for the next interval (e.g. a 20 min block, credited at its real length), an intention check-in before each focus block, and today's stats. A running interval survives quitting and relaunching.
-- **Tasks** — a Trello-style Kanban board with To Do, In Progress and Done columns. Drag cards between and within columns. Each card has a priority (High, Medium or Low), a time estimate that Cadence splits into focus blocks (re-split if you change the focus length), and an optional deadline (date and time), shown on the card and flagged when due today or overdue. Sort the board manually, by priority or by date, archive cards (one at a time or a whole list), and start focusing on a card from its menu.
-- **Day plan** — on the Focus screen, a plan that time-boxes your open tasks into focus blocks and breaks toward a daily target, highest priority first.
+- **Tasks** — a Trello-style Kanban board with To Do, In Progress and Done columns. Drag cards between and within columns. Each card has a priority (High, Medium or Low), a time estimate that Cadence splits into focus blocks (re-split if you change the focus length), and an optional deadline (date and time), shown on the card, flagged when due today or overdue, with a reminder notification an hour before. Sort the board manually, by priority or by date, archive cards (one at a time or a whole list), and start focusing on a card from its menu.
+- **Day plan** — on the Focus screen, a plan that time-boxes your open tasks into focus blocks and breaks toward a daily target, deadlines first, then by priority. One click adds its focus blocks to Calendar.
 - **History** — every completed focus block is logged with its task, priority and intention: last-14-days chart, weekly total, streak, best day, and a split by priority.
 - **Music** — an embedded YouTube player (paste a link, or pull the video playing in Brave and continue it in Cadence). Optionally pauses when focus stops and resumes when it starts.
+- **Shortcuts and Siri** — *Start Focus* (with an optional intention and length), *Pause Timer* and *Add Task* actions for the Shortcuts app, Spotlight and Siri.
 - **Automation** — a focus guard that nudges you when a distracting app comes forward during focus (pick the apps from a list of installed apps), and shortcuts from the Shortcuts app that run when focus starts or stops, for example one that uses *Set Focus* to turn Do Not Disturb on and off.
 - **Notifications** — the interval-end banner is scheduled with macOS when an interval starts, so it arrives on time even if the app is throttled or quit.
 - **Themes** — Dynamic (crisp type, coral light), Cozy (serif warmth, slower rhythm) and Blossom (rose petals, rounded softness), each in light and dark.
@@ -41,7 +42,7 @@ Because every release carries the same signature, macOS keeps the permissions yo
 
 ## AI agents (MCP)
 
-`cadence-mcp` is a stdio [MCP](https://modelcontextprotocol.io) server, so any agent can manage your board: `list_tasks`, `add_task`, `update_task`, `set_task_done`, `delete_task`, `timer_status`, `start_focus`, `pause_timer`, `day_plan`, `list_sessions`.
+`cadence-mcp` is a stdio [MCP](https://modelcontextprotocol.io) server, so any agent can manage your board: `list_tasks`, `add_task`, `update_task`, `set_task_done`, `delete_task`, `reorder_tasks`, `timer_status`, `start_focus`, `pause_timer`, `skip_interval`, `reset_timer`, `set_interval_length`, `day_plan`, `list_sessions`, `focus_summary`.
 
 The server ships inside the app at `/Applications/Cadence.app/Contents/MacOS/cadence-mcp`, and **Preferences → AI Agents** has copy-ready setup for each agent. (From source: `make mcp` builds `core/target/release/cadence-mcp`.)
 
@@ -158,14 +159,14 @@ void  cadence_core_free(char *pointer);
 uint32_t cadence_core_abi_version(void);
 ```
 
-Requests and responses are JSON. Commands: `initialize`, `tick`, `timer.start`, `timer.resume`, `timer.pause`, `timer.toggle`, `timer.reset`, `timer.skip`, `timer.select`, `timer.configure`, `timer.setLength`, `timer.assignTask`, `tasks.list`, `tasks.add`, `tasks.update`, `tasks.reorder`, `tasks.toggle`, `tasks.delete`, `tasks.clearOpen`, `sessions.list`, and `plan.build`.
+Requests and responses are JSON. Commands: `initialize`, `tick`, `timer.start`, `timer.resume`, `timer.pause`, `timer.toggle`, `timer.reset`, `timer.skip`, `timer.select`, `timer.configure`, `timer.setLength`, `timer.assignTask`, `tasks.list`, `tasks.add`, `tasks.update`, `tasks.reorder`, `tasks.toggle`, `tasks.delete`, `tasks.clearOpen`, `sessions.list`, `plan.build`, `plan.setTarget`, and `plan.ics`.
 
 The Rust core owns:
 
 - the interval state machine and transitions, including restoring a running interval after relaunch
 - auto-advancing after a completed interval and the long-break cycle
 - tasks, the focus-session log, and the day planner
-- daily/all-time stats and persistence (`~/Library/Application Support/Cadence/core-state.json`; an unreadable file is moved aside to `core-state.corrupt-<ms>.json`, never overwritten)
+- daily/all-time stats and persistence (`~/Library/Application Support/Cadence/core-state.json`, fsynced on every save; an unreadable file is moved aside to `core-state.corrupt-<ms>.json`, never overwritten, and the app says so)
 
 SwiftUI renders state, sends intents, and owns the YouTube player, Brave import, notifications and automation.
 
@@ -195,13 +196,13 @@ Cadence.xcodeproj      Ready-to-open Xcode project
 
 ## Data
 
-Tasks, focus sessions, stats, interval settings and the running interval live at:
+Tasks, focus sessions, stats, interval settings, the daily target and the running interval live at:
 
 ```text
 ~/Library/Application Support/Cadence/core-state.json
 ```
 
-A running interval is saved too: after a relaunch it continues where it was, or completes if it ended while Cadence was closed. Appearance and automation settings live in `UserDefaults`. Launch with `--demo-data` to use a separate `core-demo.json` instead.
+A running interval is saved too: after a relaunch it continues where it was, or completes if it ended while Cadence was closed. Appearance and automation settings live in `UserDefaults`. Fields the running version doesn't know (written by a newer Cadence) are kept, so an older `cadence-mcp` never erases them. Launch with `--demo-data` to use a separate `core-demo.json` instead.
 
 ## Releasing
 

@@ -175,7 +175,8 @@ enum BraveImporter {
         }
 
         let url = object["url"] as? String ?? ""
-        let videoID = (object["videoId"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        // Both values come from the page; only a well-formed ID may reach the embed URL.
+        let videoID = (object["videoId"] as? String).flatMap { YouTubeURL.extractVideoID(from: $0) }
             ?? YouTubeURL.extractVideoID(from: url)
         guard let videoID else {
             throw BraveImportError.failed("Could not find a video ID in the Brave tab.")
