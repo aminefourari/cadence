@@ -176,6 +176,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
     case automation
     case appearance
     case notifications
+    case system
     case agents
     case updates
 
@@ -187,6 +188,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
         case .automation: return "Automation"
         case .appearance: return "Appearance"
         case .notifications: return "Notifications"
+        case .system: return "System"
         case .agents: return "AI Agents"
         case .updates: return "Updates"
         }
@@ -198,6 +200,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
         case .automation: return "What happens around a focus block."
         case .appearance: return "Theme, light or dark, and the scene behind everything."
         case .notifications: return "How Cadence tells you an interval ended."
+        case .system: return "Login, global shortcuts, links, widgets and Focus modes."
         case .agents: return "Let Claude Code, Codex or opencode manage your tasks over MCP."
         case .updates: return "New versions straight from GitHub."
         }
@@ -209,6 +212,7 @@ enum AppSettingsSection: String, CaseIterable, Identifiable {
         case .automation: return "wand.and.stars"
         case .appearance: return "paintpalette.fill"
         case .notifications: return "bell.badge.fill"
+        case .system: return "command"
         case .agents: return "sparkles"
         case .updates: return "arrow.down.circle.fill"
         }
@@ -522,4 +526,72 @@ extension Date {
     var shortTimeString: String {
         formatted(date: .omitted, time: .shortened)
     }
+}
+
+/// Built-in interval setups; the cycle length stays as configured.
+struct TimerPreset: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let focus: Int
+    let shortBreak: Int
+    let longBreak: Int
+
+    static let all = [
+        TimerPreset(id: "classic", title: "Classic", focus: 25, shortBreak: 5, longBreak: 15),
+        TimerPreset(id: "deep", title: "Deep work", focus: 50, shortBreak: 10, longBreak: 20),
+        TimerPreset(id: "flow", title: "Flow", focus: 90, shortBreak: 20, longBreak: 30),
+        TimerPreset(id: "sprint", title: "Sprint", focus: 15, shortBreak: 3, longBreak: 10),
+    ]
+
+    var summary: String { "\(focus) / \(shortBreak) / \(longBreak)" }
+
+    func applied(to config: PomodoroConfig) -> PomodoroConfig {
+        var config = config
+        config.focusMinutes = focus
+        config.shortBreakMinutes = shortBreak
+        config.longBreakMinutes = longBreak
+        return config
+    }
+
+    func matches(_ config: PomodoroConfig) -> Bool {
+        config.focusMinutes == focus && config.shortBreakMinutes == shortBreak && config.longBreakMinutes == longBreak
+    }
+}
+
+/// The core's `week.summary`: this week's focus against the weekly goal.
+struct WeekSummary: Codable, Equatable {
+    struct Day: Codable, Equatable {
+        let day: String
+        let minutes: Int
+    }
+
+    struct TaskRow: Codable, Equatable {
+        let title: String
+        let minutes: Int
+        let sessions: Int
+    }
+
+    let targetMinutes: Int
+    let focusMinutes: Int
+    let sessions: Int
+    let previousWeekMinutes: Int
+    let activeDays: Int
+    let days: [Day]
+    let topTasks: [TaskRow]
+    let bestDay: Day?
+
+    var progress: Double {
+        targetMinutes > 0 ? min(1, Double(focusMinutes) / Double(targetMinutes)) : 0
+    }
+
+    static let empty = WeekSummary(
+        targetMinutes: 1200, focusMinutes: 0, sessions: 0, previousWeekMinutes: 0,
+        activeDays: 0, days: [], topTasks: [], bestDay: nil
+    )
+}
+
+/// Focus was paused because the Mac slept or nobody touched it for a while.
+struct AwayPrompt: Equatable {
+    /// When the user left; the timer was paused as of this moment.
+    let sinceMs: Int
 }

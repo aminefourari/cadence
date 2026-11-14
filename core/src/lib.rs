@@ -30,6 +30,7 @@ struct AppCore {
     /// Bumped when another process (e.g. `cadence-mcp`) changed the state file.
     external_revision: u64,
     daily_target_minutes: Option<u32>,
+    weekly_target_minutes: Option<u32>,
     /// Top-level state-file fields from a newer Cadence, written back unchanged.
     persisted_extra: Map<String, Value>,
     /// The last save failed; cleared by the next successful save.
@@ -51,6 +52,7 @@ impl AppCore {
             disk_mtime: None,
             external_revision: 0,
             daily_target_minutes: None,
+            weekly_target_minutes: None,
             persisted_extra: Map::new(),
             save_error: None,
             recovery_notice: None,
@@ -170,6 +172,13 @@ impl AppCore {
                 self.save();
                 Ok(self.state_value(now))
             }
+            "timer.extend" => {
+                let minutes = request.get("minutes").and_then(Value::as_u64).unwrap_or(5);
+                self.tick_once(now);
+                self.engine.extend(minutes.min(60) as u32);
+                self.save();
+                Ok(self.state_value(now))
+            }
             "timer.configure" => {
                 let config = request
                     .get("config")
@@ -237,6 +246,16 @@ impl AppCore {
                 serde_json::to_value(self.plan(&request, now))
                     .map_err(|error| CoreFailure::new("serialization", error.to_string()))
             }
+            "week.summary" => Ok(self.week_summary(&request)),
+            "goals.setWeekly" => {
+                let minutes = request
+                    .get("minutes")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| CoreFailure::new("bad_request", "Minutes are required."))?;
+                self.weekly_target_minutes = Some(minutes.clamp(60, 7 * 720) as u32);
+                self.save();
+                Ok(self.week_summary(&request))
+            }
             _ => Err(CoreFailure::new(
                 "unknown_command",
                 format!("Unknown command: {command}"),
@@ -292,6 +311,7 @@ impl AppCore {
         self.tasks = persisted.tasks;
         self.sessions = persisted.sessions;
         self.daily_target_minutes = persisted.daily_target_minutes;
+        self.weekly_target_minutes = persisted.weekly_target_minutes;
         self.persisted_extra = persisted.extra;
         if let Some(active_id) = persisted.active_task_id {
             if self.tasks.iter().any(|task| task.id == active_id && !task.done) {
@@ -507,6 +527,59 @@ impl AppCore {
         Ok(json!(ordered_tasks(&self.tasks)))
     }
 
+    fn weekly_target(&self) -> u32 {
+        self.weekly_target_minutes
+            .unwrap_or(5 * self.daily_target_minutes.unwrap_or(DEFAULT_TARGET_MINUTES))
+    }
+
+    /// Focus over the week whose `yyyy-MM-dd` days the caller lists in `days` (the caller
+    /// owns the calendar: week start and time zone), compared with `previousDays`.
+    fn week_summary(&self, request: &Value) -> Value {
+        let list = |key: &str| -> Vec<String> {
+            request
+                .get(key)
+                .and_then(Value::as_array)
+                .map(|days| days.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                .unwrap_or_default()
+        };
+        let days = list("days");
+        let previous = list("previousDays");
+        let mut by_day: Vec<(String, u32)> = days.iter().map(|day| (day.clone(), 0)).collect();
+        let mut by_task: Vec<(String, u32, u32)> = Vec::new();
+        let (mut sessions, mut previous_minutes) = (0u32, 0u32);
+        for session in &self.sessions {
+            if previous.contains(&session.day) {
+                previous_minutes += session.minutes;
+            }
+            let Some(slot) = by_day.iter_mut().find(|(day, _)| *day == session.day) else {
+                continue;
+            };
+            slot.1 += session.minutes;
+            sessions += 1;
+            let title = session.task_title.clone().unwrap_or_else(|| "No task".into());
+            match by_task.iter_mut().find(|(name, _, _)| *name == title) {
+                Some(row) => {
+                    row.1 += session.minutes;
+                    row.2 += 1;
+                }
+                None => by_task.push((title, session.minutes, 1)),
+            }
+        }
+        by_task.sort_by(|a, b| b.1.cmp(&a.1));
+        let focus: u32 = by_day.iter().map(|(_, minutes)| minutes).sum();
+        let best = by_day.iter().filter(|(_, minutes)| *minutes > 0).max_by_key(|(_, minutes)| *minutes);
+        json!({
+            "targetMinutes": self.weekly_target(),
+            "focusMinutes": focus,
+            "sessions": sessions,
+            "previousWeekMinutes": previous_minutes,
+            "activeDays": by_day.iter().filter(|(_, minutes)| *minutes > 0).count(),
+            "days": by_day.iter().map(|(day, minutes)| json!({"day": day, "minutes": minutes})).collect::<Vec<_>>(),
+            "topTasks": by_task.iter().take(5).map(|(title, minutes, count)| json!({"title": title, "minutes": minutes, "sessions": count})).collect::<Vec<_>>(),
+            "bestDay": best.map(|(day, minutes)| json!({"day": day, "minutes": minutes})),
+        })
+    }
+
     /// `targetMinutes` in the request overrides the saved daily target.
     fn plan(&self, request: &Value, now: u64) -> DayPlan {
         let target_minutes = request
@@ -543,6 +616,7 @@ impl AppCore {
             active_task_id: self.engine.active_task_id().cloned(),
             timer: Some(self.engine.snapshot()),
             daily_target_minutes: self.daily_target_minutes,
+            weekly_target_minutes: self.weekly_target_minutes,
             extra: self.persisted_extra.clone(),
         };
         self.save_error = storage::save(path, &payload).err();
@@ -869,6 +943,52 @@ mod tests {
         let overridden = other.handle(json!({"cmd": "plan.build", "targetMinutes": 60, "nowMs": 4})).unwrap();
         assert_eq!(overridden["targetMinutes"], 60);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn week_summary_counts_this_week_against_the_goal() {
+        let mut core = AppCore::new();
+        let session = |day: &str, minutes: u32, title: Option<&str>| FocusSession {
+            day: day.into(),
+            minutes,
+            task_title: title.map(str::to_string),
+            ..FocusSession::default()
+        };
+        core.sessions = vec![
+            session("2026-11-03", 50, Some("old")),
+            session("2026-11-09", 25, Some("api")),
+            session("2026-11-09", 25, None),
+            session("2026-11-11", 50, Some("api")),
+        ];
+        let days: Vec<String> = (9..=15).map(|d| format!("2026-11-{d:02}")).collect();
+        let previous: Vec<String> = (2..=8).map(|d| format!("2026-11-{d:02}")).collect();
+        let request = json!({"cmd": "week.summary", "days": days, "previousDays": previous});
+        let week = core.handle(request.clone()).unwrap();
+        assert_eq!(week["focusMinutes"], 100);
+        assert_eq!(week["sessions"], 3);
+        assert_eq!(week["previousWeekMinutes"], 50);
+        assert_eq!(week["activeDays"], 2);
+        assert_eq!(week["targetMinutes"], 1200, "defaults to 5x the daily target");
+        assert_eq!(week["topTasks"][0]["title"], "api");
+        assert_eq!(week["topTasks"][0]["minutes"], 75);
+        assert_eq!(week["bestDay"]["day"], "2026-11-11");
+        assert_eq!(week["days"].as_array().unwrap().len(), 7);
+
+        let mut set = request;
+        set["cmd"] = json!("goals.setWeekly");
+        set["minutes"] = json!(600);
+        assert_eq!(core.handle(set).unwrap()["targetMinutes"], 600);
+    }
+
+    #[test]
+    fn extend_adds_time_to_the_running_interval() {
+        let mut core = AppCore::new();
+        core.handle(json!({"cmd": "timer.start", "nowMs": 0, "day": "2026-11-14"})).unwrap();
+        let state = core
+            .handle(json!({"cmd": "timer.extend", "minutes": 5, "nowMs": 1_000, "day": "2026-11-14"}))
+            .unwrap();
+        assert_eq!(state["totalMs"], 30 * 60_000);
+        assert_eq!(state["endsAtMs"], 30 * 60_000);
     }
 
     #[test]

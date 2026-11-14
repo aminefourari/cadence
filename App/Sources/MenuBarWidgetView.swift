@@ -91,7 +91,29 @@ struct MenuBarWidgetView: View {
                 .buttonStyle(.plain)
                 .help("Skip interval")
 
+                Button { model.extendInterval(minutes: 5) } label: {
+                    Image(systemName: "goforward.5")
+                        .font(Theme.font(10, .semibold))
+                        .foregroundStyle(Theme.muted)
+                        .frame(width: 30, height: 30)
+                        .background { Circle().fill(Theme.controlFill) }
+                        .overlay { Circle().strokeBorder(Theme.controlStroke, lineWidth: 1) }
+                }
+                .buttonStyle(.plain)
+                .help("Add 5 minutes")
+
                 Spacer()
+
+                Button { model.miniTimerVisible.toggle() } label: {
+                    Image(systemName: model.miniTimerVisible ? "pip.exit" : "pip.enter")
+                        .font(Theme.font(10.5, .semibold))
+                        .foregroundStyle(Theme.cream.opacity(0.75))
+                        .frame(width: 30, height: 30)
+                        .background { Circle().fill(Theme.controlFill) }
+                        .overlay { Circle().strokeBorder(Theme.controlStroke, lineWidth: 1) }
+                }
+                .buttonStyle(.plain)
+                .help(model.miniTimerVisible ? "Hide the mini timer" : "Show the mini timer")
 
                 Button(action: openMain) {
                     Image(systemName: "macwindow")

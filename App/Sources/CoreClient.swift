@@ -80,6 +80,28 @@ struct CoreClient {
         )
     }
 
+    func extend(minutes: Int, nowMs: Int, day: String) throws -> TimerState {
+        try call(
+            ["cmd": "timer.extend", "minutes": minutes, "nowMs": nowMs, "day": day],
+            as: TimerState.self
+        )
+    }
+
+    /// `days` and `previousDays` are this week's and last week's `yyyy-MM-dd` days.
+    func weekSummary(days: [String], previousDays: [String], nowMs: Int) throws -> WeekSummary {
+        try call(
+            ["cmd": "week.summary", "days": days, "previousDays": previousDays, "nowMs": nowMs],
+            as: WeekSummary.self
+        )
+    }
+
+    func setWeeklyTarget(minutes: Int, days: [String], previousDays: [String], nowMs: Int) throws -> WeekSummary {
+        try call(
+            ["cmd": "goals.setWeekly", "minutes": minutes, "days": days, "previousDays": previousDays, "nowMs": nowMs],
+            as: WeekSummary.self
+        )
+    }
+
     func tasks(nowMs: Int, day: String) throws -> [TaskItem] {
         try call(
             ["cmd": "tasks.list", "nowMs": nowMs, "day": day],

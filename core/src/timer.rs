@@ -170,6 +170,22 @@ impl PomodoroEngine {
         self.ends_at_ms = None;
     }
 
+    /// Adds minutes to the current interval, running or paused (capped at 180 min). The
+    /// whole extended length is credited when it completes.
+    pub fn extend(&mut self, minutes: u32) {
+        let total = self.total_ms();
+        let new_total = (total + minutes.clamp(1, 60) as u64 * 60_000).min(180 * 60_000).max(total);
+        let added = new_total - total;
+        if added == 0 {
+            return;
+        }
+        self.length_override_ms = (new_total != self.phase.duration_ms(&self.config)).then_some(new_total);
+        self.remaining_ms += added;
+        if let Some(end) = self.ends_at_ms {
+            self.ends_at_ms = Some(end + added);
+        }
+    }
+
     pub fn last_transition(&self) -> Option<&TimerTransition> {
         self.last_transition.as_ref()
     }
@@ -459,6 +475,26 @@ mod tests {
         assert_eq!(state.phase, Phase::LongBreak);
         assert_eq!(stats.today_sessions, 4);
         assert_eq!(state.completed_in_cycle, 0);
+    }
+
+    #[test]
+    fn extending_a_running_focus_credits_the_longer_block() {
+        let mut engine = PomodoroEngine::new(PomodoroConfig::default());
+        let mut stats = stats();
+        engine.start(0);
+        engine.extend(5);
+        let state = engine.state(10 * 60_000, &stats);
+        assert_eq!(state.total_ms, 30 * 60_000);
+        assert_eq!(state.remaining_ms, 20 * 60_000);
+        assert!(!engine.tick(25 * 60_000, &mut stats), "the old end no longer completes it");
+        assert!(engine.tick(30 * 60_000, &mut stats));
+        assert_eq!(stats.today_focus_minutes, 30);
+        assert_eq!(engine.state(30 * 60_000, &stats).total_ms, 5 * 60_000, "next interval is back to normal");
+
+        engine.select_phase(Phase::Focus);
+        engine.set_length(178);
+        engine.extend(5);
+        assert_eq!(engine.state(0, &stats).total_ms, 180 * 60_000, "capped at 180 min");
     }
 
     #[test]

@@ -10,17 +10,22 @@ Cadence is deliberately split down the middle: the interface is SwiftUI, while t
 
 ## What's inside
 
-- **Focus** — 25/5/15 Pomodoro intervals, a long break every four focus sessions, configurable durations, a one-off length for the next interval (e.g. a 20 min block, credited at its real length), an intention check-in before each focus block, and today's stats. A running interval survives quitting and relaunching.
+- **Focus** — 25/5/15 Pomodoro intervals, a long break every four focus sessions, configurable durations or one-click presets (Classic 25/5/15, Deep work 50/10/20, Flow 90/20/30, Sprint 15/3/10), a one-off length for the next interval (e.g. a 20 min block, credited at its real length), *+5 min* to extend the interval you're in, an intention check-in before each focus block, and today's stats. A running interval survives quitting and relaunching.
+- **Away detection** — when the Mac sleeps or sits idle (10 min by default), focus pauses as of the moment you left. When you're back, resume, or count the time if you were still working.
 - **Tasks** — a Trello-style Kanban board with To Do, In Progress and Done columns. Drag cards between and within columns. Each card has a priority (High, Medium or Low), a time estimate that Cadence splits into focus blocks (re-split if you change the focus length), and an optional deadline (date and time), shown on the card, flagged when due today or overdue, with a reminder notification an hour before. Sort the board manually, by priority or by date, archive cards (one at a time or a whole list), and start focusing on a card from its menu.
 - **Day plan** — on the Focus screen, a plan that time-boxes your open tasks into focus blocks and breaks toward a daily target, deadlines first, then by priority. One click adds its focus blocks to Calendar.
-- **History** — every completed focus block is logged with its task, priority and intention: last-14-days chart, weekly total, streak, best day, and a split by priority.
+- **History** — every completed focus block is logged with its task, priority and intention: last-14-days chart, streak, best day, and a split by priority.
+- **Weekly goal** — a weekly focus target next to the daily one, and a *Week in review* (⇧⌘R): focus per day, top tasks, best day, and the change from last week.
 - **Music** — an embedded YouTube player (paste a link, or pull the video playing in Brave and continue it in Cadence). Optionally pauses when focus stops and resumes when it starts.
 - **Shortcuts and Siri** — *Start Focus* (with an optional intention and length), *Pause Timer* and *Add Task* actions for the Shortcuts app, Spotlight and Siri.
 - **Automation** — a focus guard that nudges you when a distracting app comes forward during focus (pick the apps from a list of installed apps), and shortcuts from the Shortcuts app that run when focus starts or stops, for example one that uses *Set Focus* to turn Do Not Disturb on and off.
 - **Notifications** — the interval-end banner is scheduled with macOS when an interval starts, so it arrives on time even if the app is throttled or quit.
 - **Themes** — Dynamic (crisp type, coral light), Cozy (serif warmth, slower rhythm) and Blossom (rose petals, rounded softness), each in light and dark.
 - **Backgrounds** — a photo that follows your theme, animated ambient scenes (rainy forest, rainy café, city rain, snowfall), abstract backgrounds, or a video background.
-- **Preferences** — Timer, Automation, Appearance, Notifications and Updates panes; every change applies instantly, and changing interval lengths never interrupts the interval in progress.
+- **From anywhere** — global shortcuts that work while another app is in front (⌃⌥Space start/pause, ⌃⌥→ skip, ⌃⌥= +5 min, ⌃⌥N quick-add a task, ⌃⌥M mini timer), a floating always-on-top **mini timer**, a Spotlight-style **quick-add** field, **Open at login**, and `cadence://` links for scripts and launchers (see below).
+- **Desktop widget** — small and medium widgets with the live countdown, today's progress, the weekly goal and what's up next (Developer ID builds; they share data through an App Group).
+- **Focus modes** — a Focus filter: add Cadence to a macOS Focus to start a focus block and turn on the focus guard when that Focus turns on.
+- **Preferences** — Timer, Automation, Appearance, Notifications, System and Updates panes; every change applies instantly, and changing interval lengths never interrupts the interval in progress.
 - **Menu bar widget** and an **end-of-day shutdown ritual**. On macOS 26 with Apple Intelligence, the ritual also writes a short recap of your day with the on-device model; nothing leaves your Mac.
 - **Keyboard-first** — start, pause, reset, skip, and switch tabs without leaving the keyboard.
 
@@ -42,7 +47,7 @@ Because every release carries the same signature, macOS keeps the permissions yo
 
 ## AI agents (MCP)
 
-`cadence-mcp` is a stdio [MCP](https://modelcontextprotocol.io) server, so any agent can manage your board: `list_tasks`, `add_task`, `update_task`, `set_task_done`, `delete_task`, `reorder_tasks`, `timer_status`, `start_focus`, `pause_timer`, `skip_interval`, `reset_timer`, `set_interval_length`, `day_plan`, `list_sessions`, `focus_summary`.
+`cadence-mcp` is a stdio [MCP](https://modelcontextprotocol.io) server, so any agent can manage your board: `list_tasks`, `add_task`, `update_task`, `set_task_done`, `delete_task`, `reorder_tasks`, `timer_status`, `start_focus`, `pause_timer`, `skip_interval`, `reset_timer`, `set_interval_length`, `day_plan`, `list_sessions`, `focus_summary`, `extend_interval`, `week_summary`.
 
 The server ships inside the app at `/Applications/Cadence.app/Contents/MacOS/cadence-mcp`, and **Preferences → AI Agents** has copy-ready setup for each agent. (From source: `make mcp` builds `core/target/release/cadence-mcp`.)
 
@@ -60,6 +65,18 @@ Register it (use the absolute path to the binary):
   ```
 
 It works with the app open or closed: it uses the same Rust core and state file (set `CADENCE_STATE` to point elsewhere), and the open app shows changes within a quarter second.
+
+## Links
+
+`cadence://` links drive the app from scripts, launchers (Raycast, Alfred), notes or the terminal (`open "cadence://…"`):
+
+| Link | Does |
+|---|---|
+| `cadence://start?task=Write%20report&minutes=50&intention=First%20draft` | Starts focus; every parameter is optional. `task` matches an open task by id or title. |
+| `cadence://add?title=Call%20the%20bank&priority=high&minutes=15` | Adds a task (`priority`: high, medium, low; `minutes`: estimate). |
+| `cadence://pause`, `toggle`, `skip`, `reset`, `extend?minutes=5` | Timer controls. |
+| `cadence://preset?name=deep` | Applies a preset: `classic`, `deep`, `flow`, `sprint`. |
+| `cadence://quick-add`, `mini-timer`, `review`, `open?tab=tasks` | Opens the quick-add field, toggles the mini timer, opens the week in review or a tab. |
 
 ## Requirements
 

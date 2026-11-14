@@ -4,6 +4,7 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var player: YouTubePlayerController
+    @Environment(\.openWindow) private var openWindow
     @State private var visitedMusic = false
 
     var body: some View {
@@ -111,7 +112,24 @@ struct RootView: View {
                 .environmentObject(model)
                 .environmentObject(player)
         }
+        .sheet(isPresented: $model.showWeeklyReview) {
+            WeeklyReviewView()
+                .environmentObject(model)
+        }
+        .alert(
+            "Focus paused while you were away",
+            isPresented: Binding(get: { model.awayPrompt != nil }, set: { if !$0 { model.awayPrompt = nil } }),
+            presenting: model.awayPrompt
+        ) { _ in
+            Button("Resume") { model.resumeAfterAway(counting: false) }
+            Button("Count it and resume") { model.resumeAfterAway(counting: true) }
+            Button("Stay paused", role: .cancel) {}
+        } message: { prompt in
+            let minutes = max(1, (CoreClient.nowMs() - prompt.sinceMs) / 60_000)
+            Text("Cadence paused the timer when you stepped away, about \(minutes) min ago. Count that time if you were still working.")
+        }
         .onAppear {
+            model.openWindowAction = openWindow
             if model.selectedTab == .music {
                 visitedMusic = true
             }

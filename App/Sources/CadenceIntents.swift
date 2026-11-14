@@ -97,6 +97,32 @@ struct AddTaskIntent: AppIntent {
     }
 }
 
+/// System Settings → Focus → a Focus → Focus filters → Cadence. macOS runs it when that
+/// Focus turns on, and again with the default values (both off) when it turns off.
+struct CadenceFocusFilter: SetFocusFilterIntent {
+    static var title: LocalizedStringResource = "Set Cadence"
+    static var description: IntentDescription? = IntentDescription("Start focusing and guard against distracting apps while this Focus is on.")
+
+    @Parameter(title: "Start a focus block", default: false)
+    var startFocus: Bool
+
+    @Parameter(title: "Turn on the focus guard", default: false)
+    var guardDistractions: Bool
+
+    var displayRepresentation: DisplayRepresentation {
+        var parts: [String] = []
+        if startFocus { parts.append("Start focus") }
+        if guardDistractions { parts.append("Focus guard") }
+        return DisplayRepresentation(title: "Cadence", subtitle: "\(parts.isEmpty ? "No changes" : parts.joined(separator: " · "))")
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        try cadenceModel().applyFocusFilter(startFocus: startFocus, guardDistractions: guardDistractions)
+        return .result()
+    }
+}
+
 struct CadenceShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
