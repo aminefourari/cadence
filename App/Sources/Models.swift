@@ -32,20 +32,25 @@ enum AppThemeMode: String, CaseIterable, Identifiable {
     case dynamic
     case cozy
     case blossom
+    case coder
 
     var id: String { rawValue }
+    /// Themes with no light palette; they ignore the Light/Dark/System setting.
+    var isDarkOnly: Bool { self == .coder }
     var title: String {
         switch self {
         case .dynamic: return "Dynamic"
         case .cozy: return "Cozy"
         case .blossom: return "Blossom"
+        case .coder: return "Coder"
         }
     }
     var subtitle: String {
         switch self {
         case .dynamic: return "Crisp type, coral light"
-        case .cozy: return "Serif warmth, slower rhythm"
+        case .cozy: return "Firelight, serif warmth, slower rhythm"
         case .blossom: return "Rose petals, rounded softness"
+        case .coder: return "Night city, terminal green"
         }
     }
 
@@ -55,14 +60,16 @@ enum AppThemeMode: String, CaseIterable, Identifiable {
         case .dynamic: return "ThemeDynamic"
         case .cozy: return "ThemeCozy"
         case .blossom: return "ThemeBlossom"
+        case .coder: return "ThemeCoder"
         }
     }
 
     var photoCredit: String {
         switch self {
-        case .dynamic: return "Lison Zhao"
-        case .cozy: return "Clay Banks"
-        case .blossom: return "Anita Austvika"
+        case .dynamic: return "Lison Zhao on Unsplash"
+        case .cozy: return "Clay Banks on Unsplash"
+        case .blossom: return "Anita Austvika on Unsplash"
+        case .coder: return "Caroline Ross on Unsplash"
         }
     }
 }

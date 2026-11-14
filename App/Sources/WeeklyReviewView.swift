@@ -39,7 +39,7 @@ struct WeeklyReviewView: View {
         .background {
             LinearGradient(colors: [Theme.inkDeep, Theme.ink, Theme.backgroundEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
-        .preferredColorScheme(model.appearanceMode.colorScheme)
+        .preferredColorScheme(model.colorScheme)
         .onAppear { model.refreshWeek() }
     }
 

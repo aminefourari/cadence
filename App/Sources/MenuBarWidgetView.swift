@@ -182,7 +182,8 @@ struct MenuBarWidgetView: View {
                 )
             }
         }
-        .preferredColorScheme(model.appearanceMode.colorScheme)
+        .preferredColorScheme(model.colorScheme)
+        .environment(\.themeMode, model.themeMode)
     }
 
     private var statusDot: some View {

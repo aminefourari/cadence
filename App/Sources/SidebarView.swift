@@ -268,6 +268,8 @@ struct TodaySidebarCard: View {
                         .frame(height: 4)
                 }
             }
+            // The capsules kept the previous theme's accent after a theme switch; rebuild them per theme.
+            .id(model.themeMode)
 
             HStack {
                 Text("\(timer.todaySessions) \(timer.todaySessions == 1 ? "session" : "sessions")")

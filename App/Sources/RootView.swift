@@ -106,11 +106,13 @@ struct RootView: View {
         }
         .frame(minWidth: 980, minHeight: 720)
         .background(WindowConfigurator())
-        .preferredColorScheme(model.appearanceMode.colorScheme)
+        .preferredColorScheme(model.colorScheme)
+        .environment(\.themeMode, model.themeMode)
         .sheet(isPresented: $model.showSettings) {
             SettingsView()
                 .environmentObject(model)
                 .environmentObject(player)
+                .environment(\.themeMode, model.themeMode)
         }
         .sheet(isPresented: $model.showWeeklyReview) {
             WeeklyReviewView()

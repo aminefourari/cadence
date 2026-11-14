@@ -1317,6 +1317,11 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Color scheme the windows render in; dark-only themes override the appearance setting.
+    var colorScheme: ColorScheme? {
+        themeMode.isDarkOnly ? .dark : appearanceMode.colorScheme
+    }
+
     func setAppearance(_ appearance: AppAppearance) {
         withAnimation(.easeInOut(duration: 0.28)) {
             appearanceMode = appearance
