@@ -21,8 +21,8 @@ settings:
     SWIFT_MODULE_CACHE_PATH: "$(PROJECT_DIR)/.module-cache"
     OTHER_SWIFT_FLAGS: "$(inherited) -disable-sandbox"
     # Shared by the app and its widget; scripts/release.sh bumps them here.
-    CURRENT_PROJECT_VERSION: 12
-    MARKETING_VERSION: "1.9.0"
+    CURRENT_PROJECT_VERSION: 13
+    MARKETING_VERSION: "1.10.0"
 targets:
   Cadence:
     type: application
