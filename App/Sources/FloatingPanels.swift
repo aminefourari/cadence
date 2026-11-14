@@ -108,7 +108,7 @@ struct MiniTimerView: View {
             Button("Open Cadence") { model.openMainWindow() }
             Button("Hide Mini Timer") { model.miniTimerVisible = false }
         }
-        .preferredColorScheme(model.appearanceMode.colorScheme)
+        .preferredColorScheme(model.colorScheme)
     }
 
     private func miniButton(_ icon: String, filled: Bool = false, help: String, action: @escaping () -> Void) -> some View {
@@ -211,7 +211,7 @@ struct QuickAddView: View {
                 .strokeBorder(Theme.controlStroke, lineWidth: 1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .preferredColorScheme(model.appearanceMode.colorScheme)
+        .preferredColorScheme(model.colorScheme)
         .onAppear { focused = true }
         .onExitCommand(perform: close)
     }

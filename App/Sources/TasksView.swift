@@ -625,7 +625,7 @@ private struct ArchiveView: View {
             .padding(Theme.s(24))
         }
         .frame(width: 480, height: 460)
-        .preferredColorScheme(model.appearanceMode.colorScheme)
+        .preferredColorScheme(model.colorScheme)
     }
 
     private func row(_ task: TaskItem) -> some View {
@@ -897,7 +897,7 @@ private struct TaskEditorView: View {
             .padding(Theme.s(24))
         }
         .frame(width: 500, height: 480)
-        .preferredColorScheme(model.appearanceMode.colorScheme)
+        .preferredColorScheme(model.colorScheme)
         .onAppear {
             titleFocused = true
             if estimateMinutes == 0 { estimateMinutes = blocksWithoutMinutes * focusMinutes }

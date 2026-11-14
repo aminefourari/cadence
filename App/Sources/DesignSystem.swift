@@ -53,29 +53,29 @@ struct ThemePalette {
     )
 
     static let cozy = ThemePalette(
-        ink: Color(hex: 0x24170F),
-        inkDeep: Color(hex: 0x170E09),
-        surface: Color(hex: 0x2C1D13),
-        surfaceHigh: Color(hex: 0x3A281A),
-        backgroundEnd: Color(hex: 0x2B1A10),
-        cream: Color(hex: 0xF8E9CF),
-        muted: Color(hex: 0xC3A688),
-        mutedDim: Color(hex: 0x8B7058),
-        accent: Color(hex: 0xE7A55C),
-        accentLight: Color(hex: 0xFFD29A),
-        amber: Color(hex: 0xF0C878),
-        mint: Color(hex: 0xA9C7A3),
-        sky: Color(hex: 0xB8C7DA),
-        danger: Color(hex: 0xD9856B),
-        hairline: Color.white.opacity(0.085),
-        panelFill: Color(hex: 0x2B1D13).opacity(0.9),
-        onAccent: Color(hex: 0x17100A),
-        controlFill: Color.white.opacity(0.055),
-        controlFillHover: Color.white.opacity(0.1),
-        controlStroke: Color.white.opacity(0.08),
-        strongFill: Color.white.opacity(0.09),
-        shadow: Color.black.opacity(0.32),
-        imageVeil: Color(hex: 0x170E09).opacity(0.76)
+        ink: Color(hex: 0x23130A),
+        inkDeep: Color(hex: 0x160B05),
+        surface: Color(hex: 0x2E1A0D),
+        surfaceHigh: Color(hex: 0x3D2414),
+        backgroundEnd: Color(hex: 0x33180A),
+        cream: Color(hex: 0xFCEBD2),
+        muted: Color(hex: 0xD2AE88),
+        mutedDim: Color(hex: 0x977353),
+        accent: Color(hex: 0xF28F4A),
+        accentLight: Color(hex: 0xFFC48A),
+        amber: Color(hex: 0xF6C46C),
+        mint: Color(hex: 0xB3C99A),
+        sky: Color(hex: 0xC9B8A6),
+        danger: Color(hex: 0xE07A5F),
+        hairline: Color(hex: 0xFFD9A8).opacity(0.1),
+        panelFill: Color(hex: 0x2A160A).opacity(0.8),
+        onAccent: Color(hex: 0x1E0F06),
+        controlFill: Color(hex: 0xFFD9A8).opacity(0.06),
+        controlFillHover: Color(hex: 0xFFD9A8).opacity(0.11),
+        controlStroke: Color(hex: 0xFFD9A8).opacity(0.1),
+        strongFill: Color(hex: 0xFFD9A8).opacity(0.1),
+        shadow: Color(hex: 0x0A0402).opacity(0.4),
+        imageVeil: Color(hex: 0x160B05).opacity(0.5)
     )
 
     static let dynamicLight = ThemePalette(
@@ -164,8 +164,35 @@ struct ThemePalette {
         case (.cozy, true): return .cozyLight
         case (.blossom, false): return .blossom
         case (.blossom, true): return .blossomLight
+        case (.coder, _): return .coder
         }
     }
+
+    static let coder = ThemePalette(
+        ink: Color(hex: 0x0B110D),
+        inkDeep: Color(hex: 0x070B08),
+        surface: Color(hex: 0x0F1712),
+        surfaceHigh: Color(hex: 0x16211A),
+        backgroundEnd: Color(hex: 0x0C1610),
+        cream: Color(hex: 0xE3F2E7),
+        muted: Color(hex: 0x8FA898),
+        mutedDim: Color(hex: 0x5A6E61),
+        accent: Color(hex: 0x4ADE80),
+        accentLight: Color(hex: 0x86EFAC),
+        amber: Color(hex: 0xF2C14E),
+        mint: Color(hex: 0x5EEAD4),
+        sky: Color(hex: 0x7DD3FC),
+        danger: Color(hex: 0xFF6B6B),
+        hairline: Color(hex: 0xBBF7D0).opacity(0.08),
+        panelFill: Color(hex: 0x0C130E).opacity(0.82),
+        onAccent: Color(hex: 0x04110A),
+        controlFill: Color(hex: 0xBBF7D0).opacity(0.05),
+        controlFillHover: Color(hex: 0xBBF7D0).opacity(0.1),
+        controlStroke: Color(hex: 0xBBF7D0).opacity(0.08),
+        strongFill: Color(hex: 0xBBF7D0).opacity(0.09),
+        shadow: Color.black.opacity(0.45),
+        imageVeil: Color(hex: 0x070B08).opacity(0.45)
+    )
 
     static let cozyLight = ThemePalette(
         ink: Color(hex: 0xF3E7D2),
@@ -221,11 +248,19 @@ struct ThemeStyle {
         radiusScale: 1.4
     )
 
+    static let coder = ThemeStyle(
+        fontDesign: .monospaced,
+        typeScale: 0.94,
+        spacingScale: 1,
+        radiusScale: 0.75
+    )
+
     static func resolve(_ mode: AppThemeMode) -> ThemeStyle {
         switch mode {
         case .dynamic: return .dynamic
         case .cozy: return .cozy
         case .blossom: return .blossom
+        case .coder: return .coder
         }
     }
 }
@@ -270,6 +305,7 @@ enum Theme {
     }
 
     static var isLight: Bool {
+        if mode.isDarkOnly { return false }
         switch appearance {
         case .light: return true
         case .dark: return false
@@ -337,6 +373,10 @@ struct AppBackground: View {
                 imageBackground(image)
                 if model.themeMode == .blossom {
                     PetalFall()
+                } else if model.themeMode == .cozy {
+                    Firelight()
+                } else if model.themeMode == .coder {
+                    CodeScreen(imageSize: image.size)
                 }
             } else if model.backgroundStyle == .image, let image = model.backgroundImage {
                 imageBackground(image)
@@ -490,9 +530,225 @@ private struct PetalFall: View {
     private func fract(_ value: Double) -> Double { value - floor(value) }
 }
 
+/// Flickering hearth glow and rising embers over the Cozy theme photo.
+private struct Firelight: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
+            let time = timeline.date.timeIntervalSinceReferenceDate
+            // Two detuned sines read as an uneven flame rather than a pulse.
+            let flicker = 0.8 + 0.12 * sin(time * 7.3) + 0.08 * sin(time * 12.9 + 1.7)
+            GeometryReader { geometry in
+                let size = geometry.size
+                ZStack {
+                    RadialGradient(
+                        colors: [Color(hex: 0xFF9A45).opacity(0.32 * flicker), Color(hex: 0xC2501C).opacity(0.12 * flicker), .clear],
+                        center: UnitPoint(x: 0.6, y: 0.68),
+                        startRadius: 0,
+                        endRadius: max(size.width, size.height) * 0.6
+                    )
+                    .blendMode(.screen)
+
+                    Canvas { context, size in
+                        for index in 0..<22 {
+                            let r = { (salt: Double) in fract(sin(Double(index) * 12.9898 + salt * 78.233) * 43758.5453) }
+                            let progress = fract(time * (0.03 + r(1) * 0.04) + r(2))
+                            let sway = sin(time * (0.8 + r(3)) + r(4) * 6) * size.width * 0.025
+                            let x = size.width * (0.42 + r(5) * 0.36) + sway
+                            let y = size.height * (0.8 - progress * 0.9)
+                            let radius = 1 + r(6) * 1.8
+                            // Embers brighten as they leave the fire and fade as they cool.
+                            let glow = sin(progress * .pi) * (0.6 + 0.4 * sin(time * (5 + r(7) * 4) + r(8) * 6))
+                            let rect = CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)
+                            context.fill(Path(ellipseIn: rect.insetBy(dx: -radius * 1.5, dy: -radius * 1.5)),
+                                         with: .color(Color(hex: 0xFF8A3D).opacity(0.18 * glow)))
+                            context.fill(Path(ellipseIn: rect), with: .color(Color(hex: 0xFFD08A).opacity(0.85 * glow)))
+                        }
+                    }
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func fract(_ value: Double) -> Double { value - floor(value) }
+}
+
+/// Code typing on the monitor and a build running on the laptop in the Coder theme photo.
+private struct CodeScreen: View {
+    let imageSize: CGSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Screen corners in ThemeCoder.jpg as fractions of the photo: top-left, top-right, bottom-right, bottom-left.
+    private static let monitor = [CGPoint(x: 1072, y: 850), CGPoint(x: 1425, y: 925), CGPoint(x: 1422, y: 1305), CGPoint(x: 1070, y: 1105)]
+        .map { CGPoint(x: $0.x / 2400, y: $0.y / 1600) }
+    private static let laptop = [CGPoint(x: 735, y: 1020), CGPoint(x: 930, y: 1025), CGPoint(x: 925, y: 1145), CGPoint(x: 735, y: 1142)]
+        .map { CGPoint(x: $0.x / 2400, y: $0.y / 1600) }
+    /// Logical size the screens are drawn at before being warped onto the photo.
+    private static let canvas = CGSize(width: 480, height: 330)
+
+    var body: some View {
+        GeometryReader { geometry in
+            // Same math as `scaledToFill` + center crop in `AppBackground.imageBackground`.
+            let scale = max(geometry.size.width / imageSize.width, geometry.size.height / imageSize.height)
+            let origin = CGPoint(
+                x: (geometry.size.width - imageSize.width * scale) / 2,
+                y: (geometry.size.height - imageSize.height * scale) / 2
+            )
+            let place = { (corners: [CGPoint]) in
+                corners.map { CGPoint(x: origin.x + $0.x * imageSize.width * scale, y: origin.y + $0.y * imageSize.height * scale) }
+            }
+
+            TimelineView(.animation(minimumInterval: 1.0 / 20, paused: reduceMotion)) { timeline in
+                // Reduce Motion freezes on a finished frame.
+                let time = reduceMotion ? 40 : timeline.date.timeIntervalSinceReferenceDate
+                ZStack(alignment: .topLeading) {
+                    screen(CodeLine.editor, rows: 14, speed: 24, time: time, corners: place(Self.monitor))
+                    screen(CodeLine.terminal, rows: 9, speed: 18, time: time + 7, corners: place(Self.laptop))
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func screen(_ script: [CodeLine], rows: Int, speed: Double, time: Double, corners: [CGPoint]) -> some View {
+        Canvas { context, size in
+            Self.draw(script, rows: rows, speed: speed, time: time, in: &context, size: size)
+        }
+        .frame(width: Self.canvas.width, height: Self.canvas.height)
+        .projectionEffect(Self.projection(from: Self.canvas, to: corners))
+    }
+
+    private static func draw(_ script: [CodeLine], rows: Int, speed: Double, time: Double, in context: inout GraphicsContext, size: CGSize) {
+        let bounds = CGRect(origin: .zero, size: size)
+        context.fill(Path(bounds), with: .color(Color(hex: 0x050A07).opacity(0.9)))
+        context.fill(Path(bounds), with: .radialGradient(
+            Gradient(colors: [Color(hex: 0x4ADE80).opacity(0.08), .clear]),
+            center: CGPoint(x: size.width * 0.3, y: size.height * 0.3), startRadius: 0, endRadius: size.width
+        ))
+
+        // Typing loops: the whole script, then a short pause before it clears.
+        let length = script.reduce(0) { $0 + $1.cost }
+        let typed = Int((time * speed).truncatingRemainder(dividingBy: Double(length) + speed * 3))
+        var remaining = typed
+        var visible: [(CodeLine, Int)] = []
+        for line in script where remaining > 0 {
+            visible.append((line, line.instant ? line.length : min(remaining, line.length)))
+            remaining -= line.cost
+        }
+        visible = Array(visible.suffix(rows))
+
+        let lineHeight = size.height / CGFloat(rows + 1)
+        // Background ambience: dim enough that UI text drawn over the screens stays readable.
+        context.opacity = 0.45
+        for (row, entry) in visible.enumerated() {
+            let (line, shown) = entry
+            var text = Text("")
+            var left = shown
+            for token in line.tokens where left > 0 {
+                text = text + Text(String(token.0.prefix(left))).foregroundColor(Color(hex: token.1))
+                left -= token.0.count
+            }
+            if row == visible.count - 1, sin(time * 6) > 0 {
+                text = text + Text("█").foregroundColor(Color(hex: 0x4ADE80))
+            }
+            context.draw(
+                text.font(.system(size: lineHeight * 0.74, weight: .medium, design: .monospaced)),
+                at: CGPoint(x: size.width * 0.04, y: lineHeight * (CGFloat(row) + 0.75)),
+                anchor: .leading
+            )
+        }
+    }
+
+    /// Homography taking a `size` rect onto the quad `corners` (TL, TR, BR, BL), as a SwiftUI projection.
+    static func projection(from size: CGSize, to corners: [CGPoint]) -> ProjectionTransform {
+        let (p0, p1, p2, p3) = (corners[0], corners[1], corners[2], corners[3])
+        let dx1 = p1.x - p2.x, dx2 = p3.x - p2.x, dx3 = p0.x - p1.x + p2.x - p3.x
+        let dy1 = p1.y - p2.y, dy2 = p3.y - p2.y, dy3 = p0.y - p1.y + p2.y - p3.y
+        let den = dx1 * dy2 - dx2 * dy1
+        let g = (dx3 * dy2 - dx2 * dy3) / den
+        let h = (dx1 * dy3 - dx3 * dy1) / den
+        // Unit square -> quad, pre-scaled so the input is in points.
+        var m = CATransform3DIdentity
+        m.m11 = (p1.x - p0.x + g * p1.x) / size.width
+        m.m21 = (p3.x - p0.x + h * p3.x) / size.height
+        m.m41 = p0.x
+        m.m12 = (p1.y - p0.y + g * p1.y) / size.width
+        m.m22 = (p3.y - p0.y + h * p3.y) / size.height
+        m.m42 = p0.y
+        m.m14 = g / size.width
+        m.m24 = h / size.height
+        m.m44 = 1
+        return ProjectionTransform(m)
+    }
+}
+
+private struct CodeLine {
+    let tokens: [(String, UInt32)]
+    var instant = false
+
+    var length: Int { tokens.reduce(0) { $0 + $1.0.count } }
+    /// Output lines appear at once but still hold the screen for a beat.
+    var cost: Int { instant ? 10 : max(length, 4) }
+
+    static let kw: UInt32 = 0x4ADE80, fn: UInt32 = 0x86EFAC, str: UInt32 = 0xFDE68A
+    static let num: UInt32 = 0x5EEAD4, plain: UInt32 = 0xD1FAE5, dim: UInt32 = 0x5B7A66, ok: UInt32 = 0x4ADE80
+
+    static let editor: [CodeLine] = [
+        CodeLine(tokens: [("// deep work, one block at a time", dim)]),
+        CodeLine(tokens: [("use ", kw), ("cadence::{", plain), ("Timer", num), (", ", plain), ("Task", num), ("};", plain)]),
+        CodeLine(tokens: [("", plain)]),
+        CodeLine(tokens: [("fn ", kw), ("focus", fn), ("(task: &", plain), ("mut ", kw), ("Task", num), (") -> ", plain), ("Result", num), (" {", plain)]),
+        CodeLine(tokens: [("    let ", kw), ("timer = ", plain), ("Timer", num), ("::", plain), ("new", fn), ("(", plain), ("25", num), (");", plain)]),
+        CodeLine(tokens: [("    while ", kw), ("timer.", plain), ("running", fn), ("() {", plain)]),
+        CodeLine(tokens: [("        task.", plain), ("advance", fn), ("()?;", plain)]),
+        CodeLine(tokens: [("        if ", kw), ("task.", plain), ("blocked", fn), ("() { ", plain), ("break", kw), ("; }", plain)]),
+        CodeLine(tokens: [("    }", plain)]),
+        CodeLine(tokens: [("    log!(", fn), ("\"shipped {}\"", str), (", task.name);", plain)]),
+        CodeLine(tokens: [("    ", plain), ("Ok", num), ("(task.", plain), ("ship", fn), ("())", plain)]),
+        CodeLine(tokens: [("}", plain)]),
+        CodeLine(tokens: [("", plain)]),
+        CodeLine(tokens: [("#[test]", dim)]),
+        CodeLine(tokens: [("fn ", kw), ("ships_on_time", fn), ("() {", plain)]),
+        CodeLine(tokens: [("    assert!(", fn), ("focus", fn), ("(&", plain), ("mut ", kw), ("demo", fn), ("()).", plain), ("is_ok", fn), ("());", plain)]),
+        CodeLine(tokens: [("}", plain)]),
+    ]
+
+    static let terminal: [CodeLine] = [
+        CodeLine(tokens: [("$ ", ok), ("cargo test", plain)]),
+        CodeLine(tokens: [("   Compiling ", ok), ("cadence v1.8.0", plain)], instant: true),
+        CodeLine(tokens: [("    Finished ", ok), ("test in 2.41s", plain)], instant: true),
+        CodeLine(tokens: [("running 42 tests", plain)], instant: true),
+        CodeLine(tokens: [("test focus ... ", plain), ("ok", ok)], instant: true),
+        CodeLine(tokens: [("test ships_on_time ... ", plain), ("ok", ok)], instant: true),
+        CodeLine(tokens: [("result: ", plain), ("ok", ok), (". 42 passed", plain)], instant: true),
+        CodeLine(tokens: [("$ ", ok), ("git push", plain)]),
+        CodeLine(tokens: [("   main -> main", dim)], instant: true),
+        CodeLine(tokens: [("$ ", ok)]),
+    ]
+}
+
+/// The active theme, published through the environment so views with no other inputs
+/// (which SwiftUI would otherwise never re-render) redraw when `Theme.mode` changes.
+private struct ThemeModeKey: EnvironmentKey {
+    static let defaultValue: AppThemeMode = .dynamic
+}
+
+extension EnvironmentValues {
+    var themeMode: AppThemeMode {
+        get { self[ThemeModeKey.self] }
+        set { self[ThemeModeKey.self] = newValue }
+    }
+}
+
 struct CadenceMark: View {
     var size: CGFloat = 38
+    // Read only to subscribe to theme changes; the colors come from `Theme`.
+    @Environment(\.themeMode) private var themeMode
 
+    /// A "C" drawn as the timer ring, with a rhythm pulse leaving through its opening.
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.29, style: .continuous)
@@ -504,36 +760,43 @@ struct CadenceMark: View {
                     )
                 )
             RoundedRectangle(cornerRadius: size * 0.29, style: .continuous)
+                .fill(
+                    RadialGradient(
+                        colors: [Theme.accent.opacity(0.22), .clear],
+                        center: UnitPoint(x: 0.75, y: 0.5),
+                        startRadius: 0,
+                        endRadius: size * 0.55
+                    )
+                )
+            RoundedRectangle(cornerRadius: size * 0.29, style: .continuous)
                 .strokeBorder(Color(hex: 0xF6EEE1).opacity(0.1), lineWidth: 1)
 
             Circle()
-                .trim(from: 0.06, to: 0.9)
-                .stroke(
-                    Color(hex: 0xF6EEE1).opacity(0.9),
-                    style: StrokeStyle(lineWidth: size * 0.062, lineCap: .round)
-                )
-                .frame(width: size * 0.54, height: size * 0.54)
-                .rotationEffect(.degrees(-90))
+                .trim(from: 0.11, to: 0.89)
+                .stroke(Color(hex: 0xF6EEE1), style: StrokeStyle(lineWidth: size * 0.085, lineCap: .round))
+                .frame(width: size * 0.56, height: size * 0.56)
 
-            HStack(spacing: size * 0.045) {
-                Capsule().fill(Theme.accent).frame(width: size * 0.052, height: size * 0.13)
-                Capsule().fill(Theme.accent).frame(width: size * 0.052, height: size * 0.25)
-                Capsule().fill(Theme.accent).frame(width: size * 0.052, height: size * 0.18)
-            }
-            .offset(y: size * 0.01)
+            MarkPulse()
+                .stroke(Theme.accent, style: StrokeStyle(lineWidth: size * 0.065, lineCap: .round, lineJoin: .round))
 
-            Circle()
-                .fill(Theme.accent.opacity(0.35))
-                .frame(width: size * 0.16)
-                .offset(x: size * 0.18, y: -size * 0.17)
-                .blur(radius: size * 0.06)
             Circle()
                 .fill(Theme.accentLight)
-                .frame(width: size * 0.075)
-                .offset(x: size * 0.18, y: -size * 0.17)
+                .frame(width: size * 0.1, height: size * 0.1)
+                .position(x: size * 0.84, y: size * 0.5)
         }
         .frame(width: size, height: size)
         .shadow(color: .black.opacity(0.35), radius: size * 0.2, x: 0, y: size * 0.14)
+    }
+}
+
+/// The heartbeat line in `CadenceMark`, in unit coordinates of the mark.
+private struct MarkPulse: Shape {
+    func path(in rect: CGRect) -> Path {
+        let points = [(0.30, 0.5), (0.44, 0.5), (0.50, 0.34), (0.57, 0.66), (0.63, 0.5), (0.84, 0.5)]
+            .map { CGPoint(x: rect.minX + $0.0 * rect.width, y: rect.minY + $0.1 * rect.height) }
+        var path = Path()
+        path.addLines(points)
+        return path
     }
 }
 

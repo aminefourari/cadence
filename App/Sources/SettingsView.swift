@@ -57,7 +57,7 @@ struct SettingsView: View {
             }
         }
         .frame(width: 800, height: 600)
-        .preferredColorScheme(model.appearanceMode.colorScheme)
+        .preferredColorScheme(model.colorScheme)
         .onAppear {
             section = model.settingsSection
             guard !loaded else { return }
@@ -441,7 +441,7 @@ struct SettingsView: View {
     private var appearanceSection: some View {
         SettingsSection(title: "Theme") {
             VStack(alignment: .leading, spacing: Theme.s(8)) {
-                HStack(spacing: Theme.s(8)) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.s(8)), count: 2), spacing: Theme.s(8)) {
                     ForEach(AppThemeMode.allCases) { mode in
                         ThemeChoiceCard(
                             mode: mode,
@@ -463,14 +463,25 @@ struct SettingsView: View {
 
     private var appearanceModesSection: some View {
         SettingsSection(title: "Appearance") {
-            HStack(spacing: Theme.s(7)) {
-                ForEach(AppAppearance.allCases) { appearance in
-                    AppearanceChoiceCard(
-                        appearance: appearance,
-                        selected: model.appearanceMode == appearance
-                    ) {
-                        model.setAppearance(appearance)
+            VStack(alignment: .leading, spacing: Theme.s(8)) {
+                HStack(spacing: Theme.s(7)) {
+                    ForEach(AppAppearance.allCases) { appearance in
+                        AppearanceChoiceCard(
+                            appearance: appearance,
+                            selected: model.appearanceMode == appearance
+                        ) {
+                            model.setAppearance(appearance)
+                        }
                     }
+                }
+                .disabled(model.themeMode.isDarkOnly)
+                .opacity(model.themeMode.isDarkOnly ? 0.45 : 1)
+
+                if model.themeMode.isDarkOnly {
+                    Text("\(model.themeMode.title) is dark only.")
+                        .font(Theme.font(9.5, .medium))
+                        .foregroundStyle(Theme.mutedDim)
+                        .padding(.leading, Theme.s(2))
                 }
             }
         }
@@ -499,7 +510,7 @@ struct SettingsView: View {
                         Text("\(model.themeMode.title) photo")
                             .font(Theme.font(11, .semibold))
                             .foregroundStyle(Theme.cream)
-                        Text("Changes with your theme · Photo by \(model.themeMode.photoCredit) on Unsplash")
+                        Text("Changes with your theme · Photo by \(model.themeMode.photoCredit)")
                             .font(Theme.font(9, .medium))
                             .foregroundStyle(selected ? Theme.accent : Theme.mutedDim)
                             .lineLimit(2)
@@ -1008,7 +1019,8 @@ private struct ThemeChoiceCard: View {
                 }
             }
             .padding(.horizontal, Theme.s(10))
-            .frame(height: 52)
+            .padding(.vertical, Theme.s(7))
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .background {
                 RoundedRectangle(cornerRadius: Theme.radius(11), style: .continuous)
                     .fill(selected ? palette.accent.opacity(0.09) : Theme.controlFill)
