@@ -21,7 +21,7 @@ struct HistoryView: View {
             header(stats)
 
             HStack(spacing: Theme.s(12)) {
-                tile(value: Self.hours(stats.weekMinutes), label: "Focused this week", tint: Theme.accent)
+                weekGoalTile
                 tile(value: "\(stats.streak) \(stats.streak == 1 ? "day" : "days")", label: "Current streak", tint: Theme.amber)
                 tile(value: Self.hours(stats.bestDayMinutes), label: "Best day", tint: Theme.mint)
                 tile(value: "\(model.sessions.count)", label: "Sessions logged", tint: Theme.sky)
@@ -43,6 +43,39 @@ struct HistoryView: View {
         .padding(.horizontal, Theme.s(34))
         .padding(.top, Theme.s(40))
         .padding(.bottom, Theme.s(22))
+    }
+
+    private var weekGoalTile: some View {
+        Button { model.showWeeklyReview = true } label: {
+            VStack(alignment: .leading, spacing: Theme.s(4)) {
+                Text(Self.hours(model.week.focusMinutes))
+                    .font(Theme.font(20, .semibold, design: .rounded))
+                    .foregroundStyle(Theme.cream)
+                    .monospacedDigit()
+                Text("of \(Self.hours(model.week.targetMinutes)) weekly goal")
+                    .font(Theme.font(9.5, .medium))
+                    .foregroundStyle(Theme.mutedDim)
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.controlFill)
+                        Capsule().fill(Theme.accent).frame(width: model.week.focusMinutes == 0 ? 0 : max(4, proxy.size.width * model.week.progress))
+                    }
+                }
+                .frame(height: 4)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Theme.s(14))
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: "chevron.right")
+                    .font(Theme.font(8, .bold))
+                    .foregroundStyle(Theme.mutedDim)
+                    .padding(Theme.s(12))
+            }
+            .panel(cornerRadius: Theme.radius(16))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle(pressedScale: 0.98))
+        .help("Week in review (⇧⌘R)")
     }
 
     private func header(_ stats: HistoryStats) -> some View {
@@ -119,7 +152,7 @@ struct HistoryView: View {
 
     private func priorityPanel(_ stats: HistoryStats) -> some View {
         VStack(alignment: .leading, spacing: Theme.s(10)) {
-            SectionLabel(text: "This week by priority")
+            SectionLabel(text: "Last 7 days by priority")
             if stats.weekMinutes == 0 {
                 Text("Finish a focus block with a task attached to see the split.")
                     .font(Theme.font(10, .medium))

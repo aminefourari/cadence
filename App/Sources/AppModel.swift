@@ -1,7 +1,11 @@
 import AppKit
+import Carbon.HIToolbox
 import Foundation
+import Security
+import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
+import WidgetKit
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -14,7 +18,15 @@ final class AppModel: ObservableObject {
         didSet { syncDeadlineReminders() }
     }
     @Published private(set) var plan: DayPlan = .empty
-    @Published private(set) var sessions: [FocusSession] = []
+    @Published private(set) var sessions: [FocusSession] = [] {
+        didSet { refreshWeek() }
+    }
+    /// This (Monday-to-Sunday) week against the weekly goal, from the core.
+    @Published private(set) var week: WeekSummary = .empty
+    @Published var showWeeklyReview = false
+    /// Set when focus was paused because the Mac slept or sat idle.
+    @Published var awayPrompt: AwayPrompt?
+    @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
     @Published private(set) var notificationsAuthorized = false
     @Published private(set) var currentDate = Date()
     @Published var showSettings = false
@@ -75,7 +87,26 @@ final class AppModel: ObservableObject {
     @Published var focusGuardEnabled: Bool {
         didSet {
             UserDefaults.standard.set(focusGuardEnabled, forKey: Self.focusGuardKey)
-            focusGuard.isEnabled = focusGuardEnabled
+            focusGuard.isEnabled = focusGuardEnabled || focusFilterGuard
+        }
+    }
+    /// Pause focus when the Mac sleeps or gets no input for `awayMinutes`.
+    @Published var pauseWhenAway: Bool {
+        didSet { UserDefaults.standard.set(pauseWhenAway, forKey: Self.pauseWhenAwayKey) }
+    }
+    @Published var awayMinutes: Int {
+        didSet { UserDefaults.standard.set(awayMinutes, forKey: Self.awayMinutesKey) }
+    }
+    @Published var globalHotKeysEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(globalHotKeysEnabled, forKey: Self.hotKeysKey)
+            GlobalHotKeys.shared.isEnabled = globalHotKeysEnabled
+        }
+    }
+    @Published var miniTimerVisible: Bool {
+        didSet {
+            UserDefaults.standard.set(miniTimerVisible, forKey: Self.miniTimerKey)
+            MiniTimerController.shared.setVisible(miniTimerVisible, model: self)
         }
     }
     /// Comma-separated app names that trigger a nudge during focus.
@@ -98,6 +129,10 @@ final class AppModel: ObservableObject {
     private static let distractingAppsKey = "cadence.distractingApps"
     private static let focusStartShortcutKey = "cadence.focusStartShortcut"
     private static let focusEndShortcutKey = "cadence.focusEndShortcut"
+    private static let pauseWhenAwayKey = "cadence.pauseWhenAway"
+    private static let awayMinutesKey = "cadence.awayMinutes"
+    private static let hotKeysKey = "cadence.globalHotKeys"
+    private static let miniTimerKey = "cadence.miniTimer"
     static let defaultDistractingApps = "Messages, Slack, Discord, Mail, WhatsApp, Telegram"
     private static let themeKey = "cadence.theme"
     private static let appearanceKey = "cadence.appearance"
@@ -121,6 +156,14 @@ final class AppModel: ObservableObject {
     private var musicPausedByTimer = false
     /// What the pending deadline reminders were built from; forces one sync at launch.
     private var deadlineSignature = ["unsynced"]
+    /// A macOS Focus filter turned the focus guard on for as long as that Focus is on.
+    private var focusFilterGuard = false
+    /// When the current run of the timer started; an away pause never reaches back past it.
+    private var runStartedMs: Int?
+    private var weekRefreshedFor = ""
+    private var lastWidgetSnapshot: WidgetSnapshot?
+    /// Captured from a SwiftUI view, so links, hot keys and panels can bring the window back.
+    var openWindowAction: OpenWindowAction?
 
     init(player: YouTubePlayerController) {
         self.player = player
@@ -130,6 +173,10 @@ final class AppModel: ObservableObject {
         distractingApps = defaults.string(forKey: Self.distractingAppsKey) ?? Self.defaultDistractingApps
         focusStartShortcut = defaults.string(forKey: Self.focusStartShortcutKey) ?? ""
         focusEndShortcut = defaults.string(forKey: Self.focusEndShortcutKey) ?? ""
+        pauseWhenAway = defaults.object(forKey: Self.pauseWhenAwayKey) as? Bool ?? true
+        awayMinutes = defaults.object(forKey: Self.awayMinutesKey) as? Int ?? 10
+        globalHotKeysEnabled = defaults.object(forKey: Self.hotKeysKey) as? Bool ?? true
+        miniTimerVisible = defaults.bool(forKey: Self.miniTimerKey)
 
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -232,6 +279,18 @@ final class AppModel: ObservableObject {
 
         Self.shared = self
         bootstrap()
+        configureHotKeys()
+        if miniTimerVisible || arguments.contains("--mini-timer") {
+            MiniTimerController.shared.setVisible(true, model: self)
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.pauseWhenAway, self.timer.running, self.timer.phase == .focus else { return }
+                self.pauseForAway(sinceMs: CoreClient.nowMs())
+            }
+        }
         if demoData {
             seedDemoDataIfNeeded()
         }
@@ -326,6 +385,7 @@ final class AppModel: ObservableObject {
             let state = try CoreClient.shared.initialize(storagePath: storagePath, day: currentDay)
             timer = state
             lastTransitionID = state.transition?.id ?? 0
+            if state.running { runStartedMs = CoreClient.nowMs() }
             announceStorageWarning(state.storageWarning, previous: nil)
             reloadTasks()
             reloadSessions()
@@ -397,6 +457,7 @@ final class AppModel: ObservableObject {
         let now = Date()
         if Int(now.timeIntervalSince1970 / 60) != Int(currentDate.timeIntervalSince1970 / 60) {
             currentDate = now
+            if currentDay != weekRefreshedFor { refreshWeek() }
         }
         do {
             let state = try CoreClient.shared.tick(nowMs: CoreClient.nowMs(), day: currentDay)
@@ -412,6 +473,7 @@ final class AppModel: ObservableObject {
         if Date().timeIntervalSince(lastPlanRefresh) > 60 {
             refreshPlan()
         }
+        checkAway()
     }
 
     private func applyTimer(_ state: TimerState, notify: Bool = true) {
@@ -425,6 +487,14 @@ final class AppModel: ObservableObject {
         if wasFocusing != isFocusing {
             focusActivityChanged(isFocusing)
         }
+        if state.running && (!previousTimer.running || state.phase != previousTimer.phase) {
+            runStartedMs = CoreClient.nowMs()
+        }
+        // Resuming, resetting or moving on answers the away prompt.
+        if awayPrompt != nil && (state.running || state.phase != previousTimer.phase || state.isFreshInterval) {
+            awayPrompt = nil
+        }
+        publishWidgetSnapshot()
         // Starting, pausing or a phase change moves where the plan begins.
         if state.running != previousTimer.running || state.phase != previousTimer.phase {
             refreshPlan()
@@ -685,6 +755,76 @@ final class AppModel: ObservableObject {
         performTimerCommand("timer.skip")
     }
 
+    /// Start/pause without the intention prompt: for hot keys, links, the widget and the
+    /// mini timer, which may run while the window is hidden.
+    func toggleTimerQuietly() {
+        if timer.running {
+            pauseTimer()
+        } else if timer.phase == .focus {
+            startFocus(intention: nil, minutes: nil)
+        } else {
+            requestNotificationsIfNeeded()
+            performTimerCommand("timer.resume")
+        }
+    }
+
+    /// Adds time to the current interval, running or paused; the full length is credited.
+    func extendInterval(minutes: Int = 5) {
+        do {
+            applyTimer(try CoreClient.shared.extend(minutes: minutes, nowMs: CoreClient.nowMs(), day: currentDay))
+            showToast("+\(minutes) min", "\(timer.formattedRemaining) left in this \(timer.phase.title.lowercased()).", icon: "goforward.plus", tint: timer.phase.accent)
+        } catch {
+            showToast("Couldn't extend the interval", error.localizedDescription, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+        }
+    }
+
+    func applyPreset(_ preset: TimerPreset) {
+        if saveTimerConfig(preset.applied(to: timer.config)) {
+            showToast("\(preset.title) preset", "\(preset.summary) min · focus / short / long break.", icon: "dial.medium.fill", tint: Theme.accent)
+        }
+    }
+
+    // MARK: - Away from the Mac
+
+    private func checkAway() {
+        guard pauseWhenAway, timer.running, timer.phase == .focus, let anyInput = CGEventType(rawValue: ~0) else { return }
+        let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
+        guard idle >= Double(awayMinutes * 60) else { return }
+        pauseForAway(sinceMs: CoreClient.nowMs() - Int(idle * 1000))
+    }
+
+    /// Pauses as of the moment the user left, so the away time is not counted.
+    private func pauseForAway(sinceMs: Int) {
+        let since = max(sinceMs, runStartedMs ?? sinceMs)
+        do {
+            applyTimer(try CoreClient.shared.performTimer("timer.pause", nowMs: since, day: currentDay))
+            awayPrompt = AwayPrompt(sinceMs: since)
+            NotificationManager.shared.post(
+                title: "Focus paused while you were away",
+                body: "Resume when you're back, or count the time if you were still working."
+            )
+        } catch {
+            coreError = error.localizedDescription
+        }
+    }
+
+    /// `counting`: resume as if never paused, so the away time counts as focus.
+    func resumeAfterAway(counting: Bool) {
+        guard let prompt = awayPrompt else { return }
+        awayPrompt = nil
+        guard !timer.running else { return }
+        requestNotificationsIfNeeded()
+        do {
+            applyTimer(try CoreClient.shared.performTimer(
+                "timer.resume",
+                nowMs: counting ? prompt.sinceMs : CoreClient.nowMs(),
+                day: currentDay
+            ))
+        } catch {
+            showToast("Couldn't resume", error.localizedDescription, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+        }
+    }
+
     func selectPhase(_ phase: PomodoroPhase) {
         guard phase != timer.phase || timer.running || timer.remainingMs != timer.totalMs else { return }
         performTimerCommand("timer.select", phase: phase)
@@ -932,6 +1072,40 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// This week's and last week's days, Monday first like cadence-mcp.
+    private func weekDays() -> (this: [String], previous: [String])? {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = .current
+        guard let start = calendar.dateInterval(of: .weekOfYear, for: Date())?.start else { return nil }
+        let days = { (offset: Int) in
+            (0..<7).compactMap { calendar.date(byAdding: .day, value: offset + $0, to: start) }.map(self.dayFormatter.string)
+        }
+        return (days(0), days(-7))
+    }
+
+    func refreshWeek() {
+        guard let days = weekDays() else { return }
+        do {
+            week = try CoreClient.shared.weekSummary(days: days.this, previousDays: days.previous, nowMs: CoreClient.nowMs())
+            weekRefreshedFor = currentDay
+            publishWidgetSnapshot()
+        } catch {
+            coreError = error.localizedDescription
+        }
+    }
+
+    func setWeeklyTargetHours(_ hours: Int) {
+        guard let days = weekDays() else { return }
+        do {
+            week = try CoreClient.shared.setWeeklyTarget(
+                minutes: min(84, max(1, hours)) * 60, days: days.this, previousDays: days.previous, nowMs: CoreClient.nowMs()
+            )
+            publishWidgetSnapshot()
+        } catch {
+            showToast("Couldn't save the weekly goal", error.localizedDescription, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+        }
+    }
+
     func reloadSessions() {
         do {
             sessions = try CoreClient.shared.sessions(nowMs: CoreClient.nowMs(), day: currentDay)
@@ -947,6 +1121,7 @@ final class AppModel: ObservableObject {
             if plan.targetMinutes > 0, plan.targetMinutes != dailyTargetMinutes {
                 dailyTargetMinutes = plan.targetMinutes // the core's saved target wins
             }
+            publishWidgetSnapshot()
         } catch {
             coreError = error.localizedDescription
         }
@@ -990,6 +1165,146 @@ final class AppModel: ObservableObject {
 
     func adjustDailyTarget(byMinutes minutes: Int) {
         dailyTargetMinutes = min(720, max(30, dailyTargetMinutes + minutes))
+    }
+
+    // MARK: - System integration
+
+    private func configureHotKeys() {
+        GlobalHotKeys.shared.configure([
+            .init(keyCode: kVK_Space, symbol: "Space", title: "Start or pause") { [weak self] in self?.toggleTimerQuietly() },
+            .init(keyCode: kVK_RightArrow, symbol: "→", title: "Skip interval") { [weak self] in self?.skipTimer() },
+            .init(keyCode: kVK_ANSI_Equal, symbol: "=", title: "Add 5 minutes") { [weak self] in self?.extendInterval(minutes: 5) },
+            .init(keyCode: kVK_ANSI_N, symbol: "N", title: "Quick-add a task") { [weak self] in self?.showQuickAdd() },
+            .init(keyCode: kVK_ANSI_M, symbol: "M", title: "Show or hide the mini timer") { [weak self] in self?.miniTimerVisible.toggle() },
+        ])
+        GlobalHotKeys.shared.isEnabled = globalHotKeysEnabled
+    }
+
+    func showQuickAdd() {
+        QuickAddController.shared.show(model: self)
+    }
+
+    func openMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindowAction?(id: "main")
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        let service = SMAppService.mainApp
+        do {
+            if enabled { try service.register() } else { try service.unregister() }
+        } catch {
+            showToast("Couldn't change Open at Login", error.localizedDescription, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+        }
+        launchAtLogin = service.status == .enabled
+        if service.status == .requiresApproval {
+            showToast("Approve Cadence in Login Items", "macOS asks once in System Settings.", icon: "person.badge.key.fill", tint: Theme.amber)
+            SMAppService.openSystemSettingsLoginItems()
+        }
+    }
+
+    /// Applied when a macOS Focus with Cadence's filter turns on, and with the default
+    /// values (both off) when it turns off.
+    func applyFocusFilter(startFocus shouldStart: Bool, guardDistractions: Bool) {
+        focusFilterGuard = guardDistractions
+        focusGuard.isEnabled = focusGuardEnabled || focusFilterGuard
+        if shouldStart && !timer.running {
+            startFocus(intention: nil, minutes: nil)
+        }
+    }
+
+    /// `cadence://` links, from scripts, launchers, notes and the widget.
+    func handle(url: URL) {
+        guard url.scheme?.lowercased() == "cadence" else { return }
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        func value(_ name: String) -> String? {
+            items.first { $0.name == name }?.value?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        }
+        let minutes = value("minutes").flatMap(Int.init)
+        switch (url.host ?? "").lowercased() {
+        case "start":
+            if let query = value("task") {
+                guard let task = openTasks.first(where: { $0.id == query || $0.title.caseInsensitiveCompare(query) == .orderedSame })
+                    ?? openTasks.first(where: { $0.title.localizedCaseInsensitiveContains(query) }) else {
+                    showToast("No open task matches", "“\(query)”", icon: "questionmark.circle.fill", tint: Theme.amber)
+                    return
+                }
+                if task.id != timer.activeTaskId { assignTask(task) }
+            }
+            startFocus(intention: value("intention"), minutes: minutes)
+        case "pause": pauseTimer()
+        case "toggle": toggleTimerQuietly()
+        case "skip": skipTimer()
+        case "reset": resetTimer()
+        case "extend": extendInterval(minutes: min(60, max(1, minutes ?? 5)))
+        case "add":
+            guard let title = value("title") else {
+                showToast("The link needs a title", "cadence://add?title=…", icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+                return
+            }
+            addTask(
+                title: title,
+                priority: value("priority").flatMap { TaskPriority(rawValue: $0.lowercased()) } ?? .medium,
+                estimateBlocks: 1,
+                estimateMinutes: minutes.map { min(1440, max(1, $0)) }
+            )
+        case "quick-add": showQuickAdd()
+        case "mini-timer": miniTimerVisible.toggle()
+        case "preset":
+            guard let preset = TimerPreset.all.first(where: { $0.id == value("name")?.lowercased() }) else {
+                showToast("Unknown preset", TimerPreset.all.map(\.id).joined(separator: ", "), icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+                return
+            }
+            applyPreset(preset)
+        case "review":
+            openMainWindow()
+            showWeeklyReview = true
+        case "open", "":
+            if let tab = value("tab").flatMap(AppTab.init(rawValue:)) { selectTab(tab) }
+            openMainWindow()
+        default:
+            showToast("Unknown Cadence link", url.absoluteString, icon: "exclamationmark.triangle.fill", tint: Theme.amber)
+        }
+    }
+
+    /// Only Developer ID builds share data with the widget: an ad-hoc build touching the
+    /// App Group container makes macOS ask for permission. `--share-widget` forces it.
+    private static let canShareWithWidget: Bool = {
+        if ProcessInfo.processInfo.arguments.contains("--share-widget") { return true }
+        var code: SecCode?
+        var requirement: SecRequirement?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
+              SecRequirementCreateWithString(
+                  "anchor apple generic and certificate leaf[subject.OU] = \"T7A3N2UXYN\"" as CFString, [], &requirement
+              ) == errSecSuccess,
+              let requirement else { return false }
+        return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
+    }()
+
+    /// Writes what the widget shows and reloads it, only when that changed.
+    private func publishWidgetSnapshot() {
+        guard Self.canShareWithWidget else { return }
+        let snapshot = WidgetSnapshot(
+            phase: timer.phase.rawValue,
+            phaseTitle: timer.phase.title,
+            running: timer.running,
+            endsAt: timer.running ? timer.endsAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000) } : nil,
+            remainingSeconds: timer.running ? 0 : timer.remainingSeconds,
+            taskTitle: activeTask?.title,
+            todayMinutes: timer.todayFocusMinutes,
+            dailyTargetMinutes: dailyTargetMinutes,
+            weekMinutes: week.focusMinutes,
+            weeklyTargetMinutes: week.targetMinutes,
+            nextBlockTitle: plan.blocks.first { $0.kind.isFocus && $0.taskId != timer.activeTaskId }?.taskTitle
+        )
+        guard snapshot != lastWidgetSnapshot else { return }
+        lastWidgetSnapshot = snapshot
+        do {
+            try snapshot.save()
+            WidgetCenter.shared.reloadAllTimelines()
+        } catch {
+            NSLog("[Cadence] widget snapshot: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Theme
@@ -1223,6 +1538,10 @@ final class AppModel: ObservableObject {
         toastWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 4.2, execute: workItem)
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 extension TaskPriority {

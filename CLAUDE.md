@@ -15,13 +15,20 @@ Native macOS focus app: SwiftUI UI + Rust core over a JSON-over-C ABI.
 - `make project` — regenerate `Cadence.xcodeproj` from `project.yml` (needs xcodegen; checked-in project is used otherwise)
 - No Swift tests, no linter. `json_contract_matches_swift_models` (lib.rs) guards the JSON shape Swift decodes.
 - After adding/removing Swift files run `make project` (xcodegen) so the Xcode project picks them up.
+- `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` are set once at project level in `project.yml` (shared by app and widget); `scripts/release.sh` expects exactly one of each.
 
 ## Layout
 
 - `core/src/lib.rs` — C ABI (`cadence_core_invoke/free/abi_version`) + command router (`timer.*`, `tasks.*`, `sessions.list`, `plan.build`/`plan.setTarget`/`plan.ics`)
 - `core/src/timer.rs` — Pomodoro state machine; `tasks.rs` — tasks (priority, in-progress, archived, position for the Kanban board), day planner; `storage.rs` — JSON persistence (`~/Library/Application Support/Cadence/core-state.json`)
 - `App/Sources/CoreClient.swift` — Swift wrapper for the ABI; `AppModel.swift` — main `ObservableObject`, 4 Hz heartbeat ticks the core
-- `App/Sources/CadenceIntents.swift` — App Intents (Shortcuts/Siri); they call `AppModel.shared`
+- `App/Sources/CadenceIntents.swift` — App Intents (Shortcuts/Siri) and the macOS Focus filter (`CadenceFocusFilter`); they call `AppModel.shared`
+- `AppModel.handle(url:)` — `cadence://` links (scheme in `App/Info.plist`, Apple Event handler in `AppDelegate`)
+- `App/Sources/GlobalHotKeys.swift` — ⌃⌥ system-wide shortcuts via Carbon `RegisterEventHotKey` (no Accessibility permission); bindings live in `AppModel.configureHotKeys`
+- `App/Sources/FloatingPanels.swift` — always-on-top mini timer and quick-add field (`NSPanel`s hosting SwiftUI)
+- Away detection: `AppModel.checkAway` (idle via `CGEventSource`) and the sleep observer pause focus back-dated to when the user left; `resumeAfterAway(counting:)` resumes back-dated to count it
+- Weekly goal: core `week.summary`/`goals.setWeekly` (Swift passes the ISO week's day strings); `WeeklyReviewView.swift`
+- Widget: `Widget/` is the `CadenceWidget` app-extension target (sandboxed). The app writes `App/Shared/WidgetSnapshot.swift` into App Group `T7A3N2UXYN.com.amine.cadence`, only when Developer ID signed (ad-hoc builds would trigger a macOS permission prompt; `--share-widget` forces it)
 - `App/Sources/YouTubePlayer.swift` — embedded WKWebView YouTube player; `BraveImporter.swift` — pulls the current video from Brave via osascript
 - `AppModel.focusActivityChanged` — single hook for focus start/stop side effects (music follows timer, `FocusGuard.swift`, Shortcuts)
 - Views: `FocusView`, `TasksView`, `MusicView`, `HistoryView`, `SettingsView`, `ShutdownRitualView`, `IntentionCheckInView`, `MenuBarWidgetView`, `SidebarView`; shared styling in `DesignSystem.swift`

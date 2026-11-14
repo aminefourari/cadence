@@ -148,8 +148,10 @@ struct SettingsView: View {
         switch section {
         case .timer:
             VStack(alignment: .leading, spacing: Theme.s(16)) {
+                presetsSection
                 intervalsSection
                 flowSection
+                awaySection
                 HStack {
                     Text(model.timer.running || !model.timer.isFreshInterval
                          ? "The interval in progress keeps its length. New lengths start with the next one."
@@ -175,6 +177,8 @@ struct SettingsView: View {
             }
         case .notifications:
             notificationsSection
+        case .system:
+            systemSection
         case .agents:
             agentsSection
         case .updates:
@@ -247,6 +251,8 @@ struct SettingsView: View {
         ("reset_timer", "Restart the current interval at full length."),
         ("set_interval_length", "One-off length for the next interval."),
         ("reorder_tasks", "Set the board's manual order."),
+        ("extend_interval", "Add minutes to the current interval."),
+        ("week_summary", "This week against the weekly goal, or set the goal."),
         ("day_plan", "Time-box open tasks toward your daily target."),
         ("list_sessions", "Recent completed focus blocks."),
         ("focus_summary", "Focused minutes per day and per task."),
@@ -673,6 +679,149 @@ struct SettingsView: View {
             .padding(.horizontal, Theme.s(14))
             .padding(.vertical, Theme.s(3))
             .panel(cornerRadius: Theme.radius(18))
+        }
+    }
+
+    private var presetsSection: some View {
+        SettingsSection(title: "Presets") {
+            HStack(spacing: Theme.s(8)) {
+                ForEach(TimerPreset.all) { preset in
+                    let active = preset.matches(draft)
+                    Button { draft = preset.applied(to: draft) } label: {
+                        VStack(alignment: .leading, spacing: Theme.s(3)) {
+                            Text(preset.title)
+                                .font(Theme.font(11.5, .semibold))
+                                .foregroundStyle(active ? Theme.onAccent : Theme.cream.opacity(0.9))
+                            Text("\(preset.summary) min")
+                                .font(Theme.font(9.5, .medium, design: .monospaced))
+                                .foregroundStyle(active ? Theme.onAccent.opacity(0.8) : Theme.mutedDim)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, Theme.s(12))
+                        .frame(height: 50)
+                        .background {
+                            RoundedRectangle(cornerRadius: Theme.radius(14), style: .continuous)
+                                .fill(active ? Theme.accent : Theme.controlFill)
+                        }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Theme.radius(14), style: .continuous)
+                                .strokeBorder(active ? .clear : Theme.controlStroke, lineWidth: 1)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressableStyle())
+                    .help("Focus / short break / long break")
+                }
+            }
+        }
+    }
+
+    private var awaySection: some View {
+        SettingsSection(title: "Away from the Mac") {
+            VStack(spacing: 0) {
+                toggleRow(
+                    icon: "figure.walk",
+                    tint: Theme.sky,
+                    title: "Pause when I step away",
+                    caption: "When the Mac sleeps or sits idle, focus pauses as of the moment you left. Count it later if you were working.",
+                    isOn: $model.pauseWhenAway
+                )
+                SettingsDivider()
+                DurationRow(
+                    icon: "hourglass",
+                    title: "Idle for",
+                    caption: "No keyboard or mouse input",
+                    accent: Theme.sky,
+                    value: $model.awayMinutes,
+                    range: 2...30,
+                    step: 1
+                )
+                .padding(.horizontal, Theme.s(14))
+                .opacity(model.pauseWhenAway ? 1 : 0.5)
+                .disabled(!model.pauseWhenAway)
+            }
+            .panel(cornerRadius: Theme.radius(18))
+        }
+    }
+
+    // MARK: - System
+
+    private var systemSection: some View {
+        VStack(alignment: .leading, spacing: Theme.s(16)) {
+            SettingsSection(title: "Startup") {
+                toggleRow(
+                    icon: "power",
+                    tint: Theme.mint,
+                    title: "Open at login",
+                    caption: "Cadence starts with your Mac, in the menu bar.",
+                    isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) })
+                )
+                .panel(cornerRadius: Theme.radius(18))
+            }
+
+            SettingsSection(title: "Global shortcuts") {
+                VStack(spacing: 0) {
+                    toggleRow(
+                        icon: "keyboard",
+                        tint: Theme.accent,
+                        title: "Work from any app",
+                        caption: "These shortcuts work even when Cadence is in the background.",
+                        isOn: $model.globalHotKeysEnabled
+                    )
+                    ForEach(Array(GlobalHotKeys.shared.bindings.enumerated()), id: \.offset) { _, binding in
+                        SettingsDivider()
+                        HStack {
+                            Text(binding.title)
+                                .font(Theme.font(11, .medium))
+                                .foregroundStyle(Theme.cream.opacity(0.85))
+                            Spacer()
+                            ShortcutHint(text: GlobalHotKeys.modifierSymbols + binding.symbol)
+                        }
+                        .padding(.horizontal, Theme.s(14))
+                        .frame(height: 36)
+                    }
+                    .opacity(model.globalHotKeysEnabled ? 1 : 0.5)
+                }
+                .panel(cornerRadius: Theme.radius(18))
+            }
+
+            SettingsSection(title: "Mini timer") {
+                toggleRow(
+                    icon: "pip",
+                    tint: Theme.sky,
+                    title: "Floating mini timer",
+                    caption: "A small countdown that stays above other windows. Drag it anywhere.",
+                    isOn: $model.miniTimerVisible
+                )
+                .panel(cornerRadius: Theme.radius(18))
+            }
+
+            SettingsSection(title: "Links · for scripts, launchers and notes") {
+                VStack(alignment: .leading, spacing: Theme.s(8)) {
+                    snippet("cadence://start?task=Write%20report&minutes=50&intention=First%20draft")
+                    snippet("cadence://add?title=Call%20the%20bank&priority=high&minutes=15")
+                    Text("Also: pause, toggle, skip, reset, extend?minutes=5, quick-add, mini-timer, preset?name=deep, review, open?tab=tasks.")
+                        .font(Theme.font(9.5, .medium))
+                        .foregroundStyle(Theme.mutedDim)
+                        .padding(.leading, Theme.s(2))
+                }
+            }
+
+            SettingsSection(title: "Widget and Focus modes") {
+                VStack(alignment: .leading, spacing: Theme.s(8)) {
+                    Text("Add the Cadence widget from the desktop: right-click it, choose Edit Widgets and search for Cadence. It shows the timer, today's progress and the weekly goal.")
+                    Text("Tie Cadence to a macOS Focus: in System Settings → Focus, pick a Focus, then Add Filter → Cadence. When that Focus turns on, Cadence can start a focus block and turn on the focus guard.")
+                    SmallSettingsButton(title: "Open Focus settings") {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Focus-Settings.extension")!)
+                    }
+                }
+                .font(Theme.font(10.5, .medium))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(Theme.s(14))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .panel(cornerRadius: Theme.radius(18))
+            }
         }
     }
 

@@ -20,13 +20,19 @@ settings:
     CLANG_MODULE_CACHE_PATH: "$(PROJECT_DIR)/.module-cache"
     SWIFT_MODULE_CACHE_PATH: "$(PROJECT_DIR)/.module-cache"
     OTHER_SWIFT_FLAGS: "$(inherited) -disable-sandbox"
+    # Shared by the app and its widget; scripts/release.sh bumps them here.
+    CURRENT_PROJECT_VERSION: 11
+    MARKETING_VERSION: "1.8.0"
 targets:
   Cadence:
     type: application
     platform: macOS
     sources:
       - path: App/Sources
+      - path: App/Shared
       - path: App/Resources
+    dependencies:
+      - target: CadenceWidget
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.amine.cadence
@@ -43,8 +49,6 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
-        CURRENT_PROJECT_VERSION: 11
-        MARKETING_VERSION: "1.8.0"
         SWIFT_EMIT_LOC_STRINGS: YES
     preBuildScripts:
       - name: Build Rust core
@@ -81,3 +85,24 @@ targets:
           else
             codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --options runtime --timestamp "$dest"
           fi
+  # Desktop / Notification Center widget. Widgets must be sandboxed; it reads the
+  # snapshot the app writes into the shared App Group container (WidgetSnapshot.swift).
+  CadenceWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Widget
+      - path: App/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.amine.cadence.widget
+        PRODUCT_NAME: CadenceWidget
+        INFOPLIST_FILE: Widget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widget/CadenceWidget.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_APP_SANDBOX: YES
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework

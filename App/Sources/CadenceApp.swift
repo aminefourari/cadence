@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import SwiftUI
 
 @main
@@ -25,7 +26,12 @@ struct CadenceApp: App {
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1080, height: 760)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("Quick Add Task…") {
+                    model.showQuickAdd()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+            }
 
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {
@@ -56,6 +62,22 @@ struct CadenceApp: App {
                     model.skipTimer()
                 }
                 .keyboardShortcut(.rightArrow, modifiers: .command)
+
+                Button("Add 5 Minutes") {
+                    model.extendInterval(minutes: 5)
+                }
+                .keyboardShortcut("=", modifiers: .command)
+
+                Menu("Preset") {
+                    ForEach(TimerPreset.all) { preset in
+                        Button("\(preset.title) · \(preset.summary)") { model.applyPreset(preset) }
+                    }
+                }
+
+                Divider()
+
+                Toggle("Mini Timer", isOn: $model.miniTimerVisible)
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
             }
 
             CommandMenu("Navigate") {
@@ -80,6 +102,11 @@ struct CadenceApp: App {
                 .keyboardShortcut("4", modifiers: .command)
 
                 Divider()
+
+                Button("Week in Review") {
+                    model.showWeeklyReview = true
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
 
                 Button("End the Day…") {
                     model.openShutdown()
@@ -133,6 +160,24 @@ extension NSApplication {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Before launch finishes, so a `cadence://` link that launched the app is not missed.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURL(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
+
+    @objc private func handleGetURL(_ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor) {
+        guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+              let url = URL(string: text) else { return }
+        MainActor.assumeIsolated {
+            AppModel.shared?.handle(url: url)
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }

@@ -48,6 +48,8 @@ pub struct Persisted {
     pub timer: Option<EngineSnapshot>,
     /// Daily focus target for the day plan; None until the user sets one.
     pub daily_target_minutes: Option<u32>,
+    /// Weekly focus goal; None means five times the daily target.
+    pub weekly_target_minutes: Option<u32>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }

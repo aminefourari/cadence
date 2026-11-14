@@ -437,6 +437,15 @@ struct TimerControls: View {
             .buttonStyle(CircleControlStyle(size: 44))
             .help("Skip to next interval")
         }
+        .overlay(alignment: .trailing) {
+            // Beside the row, so play stays centered.
+            UtilityIconButton(icon: "goforward.5", help: "Add 5 minutes (⌘=)") {
+                model.extendInterval(minutes: 5)
+            }
+            .offset(x: 52)
+            .opacity(timer.isFreshInterval && !timer.running ? 0 : 1)
+            .disabled(timer.isFreshInterval && !timer.running)
+        }
         .overlay(alignment: .bottom) {
             HStack(spacing: Theme.s(5)) {
                 ShortcutHint(text: "⌘↩")

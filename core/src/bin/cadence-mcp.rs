@@ -52,6 +52,10 @@ fn tools() -> Value {
          "inputSchema": {"type": "object", "properties": {}}},
         {"name": "set_interval_length", "description": "One-off length for the current interval (not while it is running); the next interval uses the configured length again.",
          "inputSchema": {"type": "object", "required": ["minutes"], "properties": {"minutes": {"type": "integer", "minimum": 1, "maximum": 180}}}},
+        {"name": "extend_interval", "description": "Add minutes to the current interval, running or paused (the whole length is credited when a focus block completes).",
+         "inputSchema": {"type": "object", "properties": {"minutes": {"type": "integer", "minimum": 1, "maximum": 60, "description": "Default 5."}}}},
+        {"name": "week_summary", "description": "This week (Monday to Sunday) against the weekly focus goal: minutes per day, top tasks, best day and last week's total. Pass targetMinutes to change the goal.",
+         "inputSchema": {"type": "object", "properties": {"targetMinutes": {"type": "integer", "minimum": 60, "description": "New weekly goal in minutes."}}}},
         {"name": "reorder_tasks", "description": "Set the manual board order: the listed task ids get positions 0, 1, 2… in that order.",
          "inputSchema": {"type": "object", "required": ["ids"], "properties": {"ids": {"type": "array", "items": id}}}}
     ])
@@ -255,6 +259,26 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
                 return Err("The interval is running; pause or reset it first.".into());
             }
             core("timer.setLength", pick(&["minutes"]))
+        }
+        "extend_interval" => core("timer.extend", pick(&["minutes"])),
+        "week_summary" => {
+            // ISO weekday: 1 = Monday.
+            let weekday: i64 = date(&["+%u"]).and_then(|day| day.parse().ok()).ok_or("Could not read today's date.")?;
+            let day_at = |offset: i64| {
+                let flag = if offset >= 0 { format!("-v+{offset}d") } else { format!("-v{offset}d") };
+                date(&[&flag, "+%Y-%m-%d"]).ok_or("Could not read today's date.")
+            };
+            let monday = 1 - weekday;
+            let days = (monday..monday + 7).map(day_at).collect::<Result<Vec<_>, _>>()?;
+            let previous = (monday - 7..monday).map(day_at).collect::<Result<Vec<_>, _>>()?;
+            let mut request = json!({"days": days, "previousDays": previous});
+            match args.get("targetMinutes") {
+                Some(minutes) => {
+                    request["minutes"] = minutes.clone();
+                    core("goals.setWeekly", request)
+                }
+                None => core("week.summary", request),
+            }
         }
         "reorder_tasks" => {
             core("tasks.reorder", pick(&["ids"]))?;
